@@ -1,5 +1,4 @@
 import { useState } from 'react';
-
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { useWallets } from '@privy-io/react-auth';
 import {
@@ -12,7 +11,7 @@ import TICKET_CITY_ABI from '../../abi/abi.json';
 import { pinata } from '../../utils/pinata';
 
 // Define enums for ticket types to match the contract
-const TicketType = {
+const EventType = {
   FREE: 0,
   PAID: 1,
 };
@@ -30,10 +29,11 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
 
   // State for managing ticket creation
   const [ticketState, setTicketState] = useState({
-    type: 'REGULAR',
-    price: 50,
-    regularPrice: 50,
-    vipPrice: 120,
+    type: 'REGULAR', // This is the string representation
+    typeEnum: PaidTicketCategory.REGULAR, // This is the actual enum value (1 for REGULAR, 2 for VIP)
+    price: 0,
+    regularPrice: 0,
+    vipPrice: 0,
     ticketUrl: '',
     image: null,
     imageUrl: '',
@@ -81,9 +81,13 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
     setTicketState((prevState) => {
       switch (field) {
         case 'type':
+          // Update both the string type and the enum value
+          const newTypeEnum =
+            value === 'REGULAR' ? PaidTicketCategory.REGULAR : PaidTicketCategory.VIP;
           return {
             ...prevState,
             type: value,
+            typeEnum: newTypeEnum,
             price: value === 'REGULAR' ? prevState.regularPrice : prevState.vipPrice,
           };
         case 'regularPrice':
@@ -129,7 +133,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
     }
 
     // For PAID events, validate ticket price based on type
-    if (Number(event.ticketType) === TicketType.PAID) {
+    if (Number(event.ticketType) === EventType.PAID) {
       if (ticketState.type === 'REGULAR' && ticketState.regularPrice <= 0) {
         setCreationStatus({
           ...creationStatus,
@@ -193,30 +197,23 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
       let ticketPrice;
 
       // Handle FREE event case
-      if (Number(event.ticketType) === TicketType.FREE) {
+      if (Number(event.ticketType) === EventType.FREE) {
         // For FREE events, use NONE (0) ticket category
         ticketCategory = PaidTicketCategory.NONE;
         ticketPrice = 0n; // Zero price for free tickets
       } else {
-        // For PAID events
+        // For PAID events, use the typeEnum value from state
+        ticketCategory = ticketState.typeEnum;
         if (ticketState.type === 'REGULAR') {
-          ticketCategory = PaidTicketCategory.REGULAR;
           ticketPrice = parseEther(ticketState.regularPrice.toString());
         } else {
-          ticketCategory = PaidTicketCategory.VIP;
           ticketPrice = parseEther(ticketState.vipPrice.toString());
         }
       }
 
       let hash;
-      try {
-        console.log('Creating ticket with parameters:', {
-          eventId: event.id,
-          category: ticketCategory,
-          ticketFee: ticketPrice,
-          ticketUri: ticketUri,
-        });
 
+      try {
         // Create the ticket
         hash = await walletClient.writeContract({
           address: TICKET_CITY_ADDR,
@@ -266,11 +263,12 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
           });
 
           // Reset form for the next ticket type if needed
-          if (Number(event.ticketType) === TicketType.PAID) {
+          if (Number(event.ticketType) === EventType.PAID) {
             if (ticketState.type === 'REGULAR' && !event.ticketsData.hasVIPTicket) {
               setTicketState((prev) => ({
                 ...prev,
                 type: 'VIP',
+                typeEnum: PaidTicketCategory.VIP, // Set the proper enum value (2)
               }));
             }
           }
@@ -321,7 +319,26 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
   // Determine which ticket types can be created
   const canCreateRegular = !event.ticketsData.hasRegularTicket;
   const canCreateVIP = !event.ticketsData.hasVIPTicket;
-  const isFreeEvent = Number(event.ticketType) === TicketType.FREE;
+  const isFreeEvent = Number(event.ticketType) === EventType.FREE;
+
+  // Automatically set the ticket type based on what's available
+  useState(() => {
+    if (Number(event.ticketType) === EventType.PAID) {
+      if (canCreateRegular) {
+        setTicketState((prev) => ({
+          ...prev,
+          type: 'REGULAR',
+          typeEnum: PaidTicketCategory.REGULAR,
+        }));
+      } else if (canCreateVIP) {
+        setTicketState((prev) => ({
+          ...prev,
+          type: 'VIP',
+          typeEnum: PaidTicketCategory.VIP,
+        }));
+      }
+    }
+  }, [event.ticketsData.hasRegularTicket, event.ticketsData.hasVIPTicket]);
 
   // For free events, render a simpler interface
   if (isFreeEvent) {
@@ -400,7 +417,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
             <div className="flex justify-between items-center">
               <span className="font-inter text-medium text-white">Regular Ticket:</span>
               <span className="font-inter text-medium text-primary">
-                {formatEther(event.ticketsData.regularTicketFee)} XFI
+                {formatEther(event.ticketsData.regularTicketFee)} ETN
               </span>
             </div>
           )}
@@ -408,7 +425,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
             <div className="flex justify-between items-center">
               <span className="font-inter text-medium text-white">VIP Ticket:</span>
               <span className="font-inter text-medium text-primary">
-                {formatEther(event.ticketsData.vipTicketFee)} XFI
+                {formatEther(event.ticketsData.vipTicketFee)} ETN
               </span>
             </div>
           )}
@@ -429,7 +446,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
         <div className="mb-4 bg-green-900/30 p-3 rounded-lg flex items-center gap-2">
           <CheckCircle className="w-5 h-5 text-green-400" />
           <p className="font-inter text-sm text-white">
-            Regular ticket created: {formatEther(event.ticketsData.regularTicketFee)} XFI
+            Regular ticket created: {formatEther(event.ticketsData.regularTicketFee)} ETN
           </p>
         </div>
       )}
@@ -438,14 +455,23 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
         <div className="mb-4 bg-green-900/30 p-3 rounded-lg flex items-center gap-2">
           <CheckCircle className="w-5 h-5 text-green-400" />
           <p className="font-inter text-sm text-white">
-            VIP ticket created: {formatEther(event.ticketsData.vipTicketFee)} XFI
+            VIP ticket created: {formatEther(event.ticketsData.vipTicketFee)} ETN
           </p>
         </div>
       )}
 
       <div className="space-y-4">
-        {/* Auto-select ticket type if only one type can be created */}
-        {canCreateRegular && canCreateVIP ? (
+        {/* If only one ticket type can be created, show which one */}
+        {(!canCreateRegular || !canCreateVIP) && (
+          <div className="bg-primary/20 p-3 rounded-lg">
+            <p className="font-inter text-medium text-white">
+              Creating {canCreateVIP ? 'VIP' : 'Regular'} Ticket
+            </p>
+          </div>
+        )}
+
+        {/* Only show the ticket type selector if both options are available */}
+        {canCreateRegular && canCreateVIP && (
           <div>
             <label className="font-inter text-medium text-white block mb-2">
               Ticket Type to Create:
@@ -455,16 +481,9 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
               value={ticketState.type}
               onChange={(e) => handleTicketChange('type', e.target.value)}
             >
-              {canCreateRegular && <option value="REGULAR">REGULAR</option>}
-              {canCreateVIP && <option value="VIP">VIP</option>}
+              <option value="REGULAR">REGULAR</option>
+              <option value="VIP">VIP</option>
             </select>
-          </div>
-        ) : (
-          // If only one type can be created, show which type is being created
-          <div className="bg-primary/20 p-3 rounded-lg">
-            <p className="font-inter text-medium text-white">
-              Creating {canCreateRegular ? 'Regular' : 'VIP'} Ticket
-            </p>
           </div>
         )}
 
@@ -494,7 +513,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
         {canCreateRegular && (!canCreateVIP || ticketState.type === 'REGULAR') && (
           <div>
             <label className="font-inter text-medium text-white block mb-2">
-              Regular Ticket Price (XFI):
+              Regular Ticket Price (ETN):
             </label>
             <input
               type="number"
@@ -507,7 +526,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
             {event.ticketsData.hasVIPTicket && (
               <p className="text-sm text-gray-400 mt-1">
                 Price must be less than VIP ticket ({formatEther(event.ticketsData.vipTicketFee)}{' '}
-                XFI)
+                ETN)
               </p>
             )}
           </div>
@@ -516,7 +535,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
         {canCreateVIP && (!canCreateRegular || ticketState.type === 'VIP') && (
           <div>
             <label className="font-inter text-medium text-white block mb-2">
-              VIP Ticket Price (XFI):
+              VIP Ticket Price (ETN):
             </label>
             <input
               type="number"
@@ -529,7 +548,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
             {event.ticketsData.hasRegularTicket && (
               <p className="text-sm text-gray-400 mt-1">
                 Price must be greater than Regular ticket (
-                {formatEther(event.ticketsData.regularTicketFee)} XFI)
+                {formatEther(event.ticketsData.regularTicketFee)} ETN)
               </p>
             )}
           </div>
@@ -560,16 +579,16 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
         >
           {creationStatus.loading
             ? `Creating ${
-                !canCreateRegular && canCreateVIP
+                canCreateVIP && !canCreateRegular
                   ? 'VIP'
-                  : !canCreateVIP && canCreateRegular
+                  : canCreateRegular && !canCreateVIP
                   ? 'Regular'
                   : ticketState.type
               } Ticket...`
             : `Create ${
-                !canCreateRegular && canCreateVIP
+                canCreateVIP && !canCreateRegular
                   ? 'VIP'
-                  : !canCreateVIP && canCreateRegular
+                  : canCreateRegular && !canCreateVIP
                   ? 'Regular'
                   : ticketState.type
               } Ticket`}

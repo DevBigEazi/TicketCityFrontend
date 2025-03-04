@@ -1,6 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import ExploreEvents from './Pages /EventsExpore';
-import EventDetails from './Pages /EventDetails';
 import CreateEventForm from './Pages /CreateEventsForm';
 import EventPreview from './Pages /EventsPreview';
 import PublishedEvents from './Pages /PublishedEvents';
@@ -15,16 +14,26 @@ import FreeEventDetails from './Pages /EventDetails';
 const App: React.FC = () => {
   const { ready } = usePrivy();
 
-  if (!ready) return <h2>Wallet getting ready...</h2>;
+  if (!ready)
+    return (
+      <div className="min-h-screen bg-background flex justify-center items-center p-8">
+        <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
+          <h1 className="text-white text-2xl font-bold mb-4 text-center">
+            Wallet getting ready...
+          </h1>
+          <div className="flex justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          </div>
+        </div>
+      </div>
+    );
 
   return (
     <Router>
       <Routes>
         <Route path="/" element={<ExploreEvents />} />
         <Route path="/explore" element={<ExploreEvents />} />
-        {/* Remove the old /event/:id route */}
-        {/* Updated route to use organizer address instead of userAddress */}
-        <Route path="/:organiserAddress/event/:eventId" element={<FreeEventDetails />} />
+        <Route path="/event/:eventId" element={<FreeEventDetails />} />
         <Route path="/create-event" element={<CreateEventForm />} />
         <Route path="/event-preview" element={<EventPreview />} />
         <Route path="/published-events" element={<PublishedEvents />} />

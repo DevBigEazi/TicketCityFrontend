@@ -228,7 +228,7 @@ const EventPreview = () => {
       }
 
       // Navigate to the new event details page with the event ID and user address
-      navigate(`/${address}/event/${createdEventId}`);
+      navigate(`/event/${createdEventId}`);
     } catch (error: any) {
       console.error('Error during event creation:', error);
       setError(error.message || 'Failed to create event');

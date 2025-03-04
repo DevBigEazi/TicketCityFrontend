@@ -9,11 +9,42 @@ interface EventCardProps {
 }
 
 const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
+  // Guard against undefined or null event
+  if (!event) {
+    console.error('EventCard received undefined or null event');
+    return (
+      <div className="rounded-lg overflow-hidden shadow-button-inset backdrop-blur-lg p-4 text-textGray">
+        Event data unavailable
+      </div>
+    );
+  }
+
+  // Safely extract properties with defaults to prevent runtime errors
+  const {
+    id = '',
+    title = 'Untitled Event',
+    description = 'No description available',
+    location = 'TBD',
+    date = 'TBD',
+    price = { regular: 0, vip: 0 },
+    image = '/placeholder-event.jpg',
+    type = 'Unknown',
+  } = event;
+
+  // Ensure price values are numbers and handle potential undefined
+  const regularPrice = typeof price?.regular === 'number' ? price.regular : 0;
+  const vipPrice = typeof price?.vip === 'number' ? price.vip : 0;
+
+  // Handle image loading errors
+  const handleImageError = (e) => {
+    e.target.src = '/placeholder-event.jpg';
+  };
+
   const isGrid = viewMode === 'grid';
 
   return (
     <Link
-      to={`/${event.organiser}/event/${event.id}`}
+      to={`/event/${id}`}
       className={`
       ${
         isGrid
@@ -32,9 +63,14 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
           rounded-lg overflow-hidden
         `}
       >
-        <img src={event.image} alt={event.title} className="w-full h-full object-cover" />
+        <img
+          src={image}
+          alt={title}
+          className="w-full h-full object-cover"
+          onError={handleImageError}
+        />
         <div className="absolute top-4 left-4 bg-white rounded-full px-3 py-1">
-          <span className="text-sm font-inter">{event.type}</span>
+          <span className="text-sm font-inter">{type}</span>
         </div>
       </div>
 
@@ -44,16 +80,16 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
         ${isGrid ? 'p-4 border-t border-borderStroke' : 'flex-1 py-4'}
       `}
       >
-        <h3 className="font-poppins font-semibold text-lg text-white mb-3">{event.title}</h3>
+        <h3 className="font-poppins font-semibold text-lg text-white mb-3">{title}</h3>
 
         <div className="space-y-2 mb-4">
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-textGray" />
-            <span className="font-inter text-sm text-textGray">{event.location}</span>
+            <span className="font-inter text-sm text-textGray">{location}</span>
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-textGray" />
-            <span className="font-inter text-sm text-textGray">{event.date}</span>
+            <span className="font-inter text-sm text-textGray">{date}</span>
           </div>
         </div>
 
@@ -63,8 +99,8 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
         `}
         >
           <div className="font-inter font-semibold text-primary">
-            {event.price.regular} ETN
-            <span className="ml-2 text-textGray">(VIP: {event.price.vip} ETN)</span>
+            {regularPrice} ETN
+            {vipPrice > 0 && <span className="ml-2 text-textGray">(VIP: {vipPrice} ETN)</span>}
           </div>
 
           <button

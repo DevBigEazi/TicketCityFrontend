@@ -80,45 +80,72 @@ const EventsSection: React.FC = () => {
               console.error(`Error fetching event ${eventId}:`, error);
               return null;
             }
-          })
+          }),
         );
 
         // Step 3: Fetch ticket details for each event
         const formattedEvents = await Promise.all(
           eventsData
-            .filter(event => event !== null)
+            .filter((event) => event !== null)
             .map(async ({ eventId, eventData }) => {
               // Check if event has ended
               const hasEnded = Number(eventData.endDate) * 1000 < Date.now();
-              
-              // Get ticket details for paid events
+
+              // Get ticket details for events
               let regularPrice = 0;
               let vipPrice = 0;
+              let hasRegularTicket = false;
+              let hasVIPTicket = false;
+              let hasTicketCreated = false;
 
               try {
-                // For paid events, get ticket details
-                if (Number(eventData.ticketType) === 1) { // PAID event
-                  const eventTickets = await publicClient.readContract({
-                    address: TICKET_CITY_ADDR,
-                    abi: TICKET_CITY_ABI,
-                    functionName: 'eventTickets',
-                    args: [eventId],
-                  });
+                // Fetch ticket details for both free and paid events
+                const eventTickets = await publicClient.readContract({
+                  address: TICKET_CITY_ADDR,
+                  abi: TICKET_CITY_ABI,
+                  functionName: 'eventTickets',
+                  args: [eventId],
+                });
 
-                  if (eventTickets) {
-                    regularPrice = eventTickets.hasRegularTicket
-                      ? Number(eventTickets.regularTicketFee) / 1e18
-                      : 0;
-                    vipPrice = eventTickets.hasVIPTicket
-                      ? Number(eventTickets.vipTicketFee) / 1e18
-                      : 0;
-                  }
+                console.log(`Event ${eventId} tickets:`, eventTickets);
+
+                // Check if ticket data is an array (legacy format) or object (new format)
+                if (Array.isArray(eventTickets)) {
+                  hasRegularTicket = eventTickets[0];
+                  hasVIPTicket = eventTickets[1];
+                  regularPrice = hasRegularTicket ? Number(eventTickets[2]) / 1e18 : 0;
+                  vipPrice = hasVIPTicket ? Number(eventTickets[3]) / 1e18 : 0;
+                } else {
+                  hasRegularTicket = eventTickets.hasRegularTicket;
+                  hasVIPTicket = eventTickets.hasVIPTicket;
+                  regularPrice = hasRegularTicket
+                    ? Number(eventTickets.regularTicketFee) / 1e18
+                    : 0;
+                  vipPrice = hasVIPTicket ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
+                }
+
+                // Check if any ticket type is available
+                hasTicketCreated =
+                  hasRegularTicket || hasVIPTicket || Number(eventData.ticketType) === 0; // Free events are always considered to have tickets
+
+                // For free events, ensure they're marked as having tickets if NFT address exists
+                if (
+                  Number(eventData.ticketType) === 0 &&
+                  eventData.ticketNFTAddr &&
+                  eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+                ) {
+                  hasTicketCreated = true;
                 }
               } catch (error) {
                 console.error(`Error fetching ticket details for event ${eventId}:`, error);
-                // Fallback to ticketFee from event data
-                regularPrice = Number(eventData.ticketFee) / 1e18 || 0;
-                vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
+                // For backwards compatibility, check if ticketFee is set
+                if (eventData.ticketFee) {
+                  regularPrice = Number(eventData.ticketFee) / 1e18 || 0;
+                  vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
+                  hasRegularTicket = regularPrice > 0;
+                  hasVIPTicket = false;
+                  hasTicketCreated = hasRegularTicket;
+                }
               }
 
               // Validate and process the image URL
@@ -131,9 +158,9 @@ const EventsSection: React.FC = () => {
               return {
                 id: eventId.toString(),
                 type: getTicketType(eventData),
-                title: eventData.title,
-                description: eventData.desc,
-                location: eventData.location,
+                title: eventData.title || 'Untitled Event',
+                description: eventData.desc || 'No description available',
+                location: eventData.location || 'TBD',
                 date: formatDate(eventData.startDate),
                 endDate: formatDate(eventData.endDate),
                 price: {
@@ -149,15 +176,22 @@ const EventsSection: React.FC = () => {
                 },
                 remainingTickets: remainingTickets,
                 hasEnded: hasEnded,
-                rawData: eventData // Keep raw data for debugging
+                hasTicketCreated: hasTicketCreated, // Added flag to track if tickets are created
+                hasRegularTicket: hasRegularTicket,
+                hasVIPTicket: hasVIPTicket,
+                rawData: eventData, // Keep raw data for debugging
               };
-            })
+            }),
         );
 
         console.log('Formatted events:', formattedEvents);
-        
-        // Filter out events that have ended
-        const activeEvents = formattedEvents.filter(event => !event.hasEnded);
+
+        // Filter out events that have ended AND ensure at least one ticket is available
+        const activeEvents = formattedEvents.filter(
+          (event) => !event.hasEnded && event.hasTicketCreated,
+        );
+
+        console.log('Active events with tickets:', activeEvents);
         setEvents(activeEvents);
       } catch (error) {
         console.error('Failed to fetch events:', error);
@@ -174,8 +208,10 @@ const EventsSection: React.FC = () => {
     if (activeFilter === 'All') return true;
     if (activeFilter === 'Free' && event.type === 'Free') return true;
     if (activeFilter === 'Paid' && event.type !== 'Free') return true;
-    if (activeFilter === 'Regular' && event.price.regular > 0 && event.type !== 'VIP') return true;
-    if (activeFilter === 'VIP' && event.type === 'VIP') return true;
+    // Fix for VIP filter - check both event type and hasVIPTicket flag
+    if (activeFilter === 'VIP' && (event.type === 'VIP' || event.hasVIPTicket)) return true;
+    if (activeFilter === 'Regular' && event.hasRegularTicket && event.price.regular > 0)
+      return true;
     if (activeFilter === 'Virtual' && event.location.toLowerCase().includes('virtual')) return true;
     if (activeFilter === 'In-Person' && !event.location.toLowerCase().includes('virtual'))
       return true;

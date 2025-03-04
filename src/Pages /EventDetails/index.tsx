@@ -13,7 +13,7 @@ import TicketCreationSection from '../../components /Events/TicketCreationSectio
 import EventDetailsFooter from '../../components /Events/EventDetailsFooter';
 
 // Enums for ticket types to match the contract
-const TicketType = {
+const EventType = {
   FREE: 0,
   PAID: 1,
 };
@@ -84,8 +84,8 @@ const EventDetails = () => {
   const [error, setError] = useState(null);
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [hasTicket, setHasTicket] = useState(false);
-  const [freeTicketCreated, setFreeTicketCreated] = useState(false);
-  const [paidTicketCreated, setPaidTicketCreated] = useState(false);
+  const [ticketCreated, setTicketCreated] = useState(false);
+
   const [attendanceRate, setAttendanceRate] = useState('Loading...');
   const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
   const [purchaseError, setPurchaseError] = useState(null);
@@ -141,37 +141,46 @@ const EventDetails = () => {
         args: [eventIdNumber],
       });
 
-      // Check if tickets have been created
-      const hasFreeTicketCreated =
-        eventData.ticketType === TicketType.FREE &&
-        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
-
-      const hasPaidTicketCreated =
-        eventData.ticketType === TicketType.PAID &&
-        (eventTicketsData.hasRegularTicket || eventTicketsData.hasVIPTicket) &&
-        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
-
-      setFreeTicketCreated(hasFreeTicketCreated);
-      setPaidTicketCreated(hasPaidTicketCreated);
+      // Format the ticket data properly
+      const formattedTicketsData = {
+        hasRegularTicket: eventTicketsData[0],
+        hasVIPTicket: eventTicketsData[1],
+        regularTicketFee: eventTicketsData[2],
+        vipTicketFee: eventTicketsData[3],
+        ticketURI: eventTicketsData[4],
+      };
 
       // Set event data
       const formattedEvent = {
         ...eventData,
         id: eventIdNumber,
-        ticketsData: eventTicketsData,
+        ticketsData: formattedTicketsData,
       };
 
       setEvent(formattedEvent);
 
-      // Fix: Set appropriate initial ticket type based on what's available
-      if (Number(eventData.ticketType) === TicketType.PAID) {
-        if (eventTicketsData.hasRegularTicket) {
-          setSelectedTicketType('REGULAR');
-        } else if (eventTicketsData.hasVIPTicket) {
-          setSelectedTicketType('VIP');
-        }
+      // Check if tickets have been created
+      const hasTicketCreated =
+        (Number(eventData.ticketType) === EventType.FREE ||
+          Number(eventData.ticketType) === EventType.PAID) &&
+        (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
+        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
+
+      setTicketCreated(hasTicketCreated);
+
+      // Set appropriate initial ticket type based on what's available
+      // Determine if tickets have been created - different logic for FREE vs PAID events
+      if (Number(eventData.ticketType) === EventType.FREE) {
+        // For FREE events, we only need the NFT contract address to be set
+        setTicketCreated(eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000');
+      } else if (Number(eventData.ticketType) === EventType.PAID) {
+        // For PAID events, we need ticket types and NFT contract
+        setTicketCreated(
+          (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
+            eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
+        );
       } else {
-        setSelectedTicketType('NONE'); // For free events
+        setTicketCreated(false);
       }
 
       // If user is authenticated, check for user-specific information
@@ -233,7 +242,7 @@ const EventDetails = () => {
     return new Date(Number(timestamp) * 1000).toLocaleTimeString();
   };
 
-  // Purchase ticket function with enhanced error handling
+  // Purchase ticket function error handling
   const handlePurchaseTicket = async () => {
     if (!event || !wallets || !wallets[0]) {
       setPurchaseError('Event details not available or wallet not connected');
@@ -245,7 +254,7 @@ const EventDetails = () => {
 
     try {
       // First check if the event is FREE or PAID
-      const isFreeEvent = Number(event.ticketType) === TicketType.FREE;
+      const isFreeEvent = Number(event.ticketType) === EventType.FREE;
 
       // Determine ticket category based on event type and selection
       let ticketCategory;
@@ -258,33 +267,14 @@ const EventDetails = () => {
       } else {
         // For PAID events, use the selected ticket type
         if (selectedTicketType === 'REGULAR' && event.ticketsData.hasRegularTicket) {
-          ticketCategory = PaidTicketCategory.REGULAR;
+          ticketCategory = PaidTicketCategory.REGULAR; // This is index 1 in the enum
           ticketPrice = event.ticketsData.regularTicketFee;
         } else if (selectedTicketType === 'VIP' && event.ticketsData.hasVIPTicket) {
-          ticketCategory = PaidTicketCategory.VIP;
+          ticketCategory = PaidTicketCategory.VIP; // This is index 2 in the enum
           ticketPrice = event.ticketsData.vipTicketFee;
         } else {
           throw new Error('Selected ticket type is not available for this event');
         }
-      }
-
-      // For debugging
-      console.log({
-        isFreeEvent,
-        selectedTicketType,
-        ticketCategory,
-        ticketPrice: ticketPrice.toString(),
-      });
-
-      // Verify user has enough balance
-      const balanceWei = await publicClient.getBalance({
-        address: wallets[0].address,
-      });
-
-      if (balanceWei < ticketPrice) {
-        throw new Error(
-          `Insufficient ETN balance. You need at least ${formatEther(ticketPrice)} ETN.`,
-        );
       }
 
       // Get wallet client
@@ -297,7 +287,7 @@ const EventDetails = () => {
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'purchaseTicket',
-          args: [event.id, ticketCategory],
+          args: [event.id, ticketCategory], // Using the numeric enum value
           value: ticketPrice,
           account: wallets[0].address,
         });
@@ -351,10 +341,9 @@ const EventDetails = () => {
     return <NoEventState navigate={navigate} />;
   }
 
-  // Ticket selection component
   const TicketTypeSelector = () => {
     // Determine what options should be available
-    const isPaidEvent = event && Number(event.ticketType) === TicketType.PAID;
+    const isPaidEvent = event && Number(event.ticketType) === EventType.PAID;
     const hasRegularOption = isPaidEvent && event.ticketsData?.hasRegularTicket;
     const hasVipOption = isPaidEvent && event.ticketsData?.hasVIPTicket;
 
@@ -380,14 +369,6 @@ const EventDetails = () => {
         setSelectedTicketType('NONE');
       }
     }, [event, isPaidEvent, hasRegularOption, hasVipOption]);
-
-    // For debugging, log what options are available
-    console.log({
-      isPaidEvent,
-      hasRegularOption,
-      hasVipOption,
-      currentSelection: selectedTicketType,
-    });
 
     return (
       <div>
@@ -627,8 +608,8 @@ const EventDetails = () => {
               /* ORGANIZER VIEW */
               <>
                 {/* Ticket Creation Section for Organizer */}
-                {(Number(event.ticketType) === TicketType.FREE && !freeTicketCreated) ||
-                (Number(event.ticketType) === TicketType.PAID &&
+                {(Number(event.ticketType) === EventType.FREE && !ticketCreated) ||
+                (Number(event.ticketType) === EventType.PAID &&
                   (!event.ticketsData.hasRegularTicket || !event.ticketsData.hasVIPTicket)) ? (
                   <TicketCreationSection
                     event={event}
@@ -639,33 +620,7 @@ const EventDetails = () => {
                 ) : null}
 
                 {/* Organizer - Purchase Ticket Section */}
-                {(freeTicketCreated || paidTicketCreated) && !hasTicket ? (
-                  <div className="rounded-lg border border-borderStroke p-6 mt-6">
-                    <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
-                      🎟️ Get Your Own Ticket
-                    </h2>
-                    <div className="space-y-4">
-                      <TicketTypeSelector />
-
-                      {purchaseError && (
-                        <div className="bg-red-900/30 p-3 rounded-lg flex items-center gap-2">
-                          <AlertCircle className="w-5 h-5 text-red-400" />
-                          <p className="font-inter text-sm text-white">{purchaseError}</p>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={handlePurchaseTicket}
-                        disabled={isPurchasing}
-                        className="w-full bg-primary rounded-lg py-3 font-poppins text-[18px] leading-[27px] tracking-wider text-white disabled:opacity-50"
-                      >
-                        {isPurchasing ? 'Processing...' : 'Reserve Your Ticket'}
-                      </button>
-
-                      <WalletInfo />
-                    </div>
-                  </div>
-                ) : null}
+                {ticketCreated && !hasTicket ? <PurchaseTicketSection /> : null}
 
                 {/* Organizer - Ticket Owned Section */}
                 {hasTicket && <TicketOwnedSection />}
@@ -674,22 +629,22 @@ const EventDetails = () => {
               /* AUTHENTICATED NON-ORGANIZER VIEW */
               <>
                 {/* If tickets are available and user doesn't have a ticket */}
-                {authenticated && paidTicketCreated && !hasTicket ? (
+                {ticketCreated && !hasTicket ? (
                   <PurchaseTicketSection />
                 ) : hasTicket ? (
                   // If user already has a ticket
                   <TicketOwnedSection />
-                ) : !hasTicket ? (
-                  <PurchaseTicketSection />
                 ) : (
                   // If no tickets have been created yet
                   <NoTicketsSection />
                 )}
               </>
             )
-          ) : (
-            /* NON-AUTHENTICATED USER VIEW */
+          ) : /* NON-AUTHENTICATED USER VIEW */
+          ticketCreated ? (
             <PurchaseTicketSection />
+          ) : (
+            <NoTicketsSection />
           )}
         </div>
 
