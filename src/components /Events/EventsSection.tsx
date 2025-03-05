@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutGrid, List, Calendar, Ticket } from 'lucide-react';
+import { LayoutGrid, List, Calendar, Ticket, RefreshCw } from 'lucide-react';
 import EventCard from './EventsCard';
 import { Event, EventFilter, ViewMode } from '../../types';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 
 const ITEMS_PER_PAGE = 12;
+const REFRESH_INTERVAL = 30000; // 30 seconds
 
 // Updated filters to match contract's ticket type categories
 const filters = ['All', 'Free', 'Paid', 'Regular', 'VIP', 'Virtual', 'In-Person'];
@@ -17,6 +18,8 @@ const EventsSection: React.FC = () => {
   const [sortBy, setSortBy] = useState<'Date' | 'Popularity' | 'Ticket Price'>('Date');
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const publicClient = createPublicClientInstance();
 
@@ -41,167 +44,214 @@ const EventsSection: React.FC = () => {
     return 'Paid'; // Default for paid tickets
   };
 
-  // Fetch events from blockchain
-  useEffect(() => {
-    const fetchEvents = async () => {
+  // Fetch events from blockchain - modified to support silent refreshes
+  const fetchEvents = async (showLoadingState = true) => {
+    if (showLoadingState) {
       setLoading(true);
-      try {
-        // Step 1: Get valid event IDs from the contract using getAllValidEvents
-        const validEventIds = await publicClient.readContract({
-          address: TICKET_CITY_ADDR,
-          abi: TICKET_CITY_ABI,
-          functionName: 'getAllValidEvents',
-          args: [],
-        });
+    } else {
+      setIsRefreshing(true);
+    }
 
-        console.log('Valid event IDs:', validEventIds);
+    try {
+      // Step 1: Get valid event IDs from the contract using getAllValidEvents
+      const validEventIds = await publicClient.readContract({
+        address: TICKET_CITY_ADDR,
+        abi: TICKET_CITY_ABI,
+        functionName: 'getAllValidEvents',
+        args: [],
+      });
 
-        if (!validEventIds || !Array.isArray(validEventIds) || validEventIds.length === 0) {
-          console.warn('No valid events found');
-          setEvents([]);
-          setLoading(false);
-          return;
-        }
+      console.log('Valid event IDs:', validEventIds);
 
-        // Step 2: Fetch each event's details using the getEvent function
-        const eventsData = await Promise.all(
-          validEventIds.map(async (eventId) => {
+      if (!validEventIds || !Array.isArray(validEventIds) || validEventIds.length === 0) {
+        console.warn('No valid events found');
+        setEvents([]);
+        return;
+      }
+
+      // Step 2: Fetch each event's details using the getEvent function
+      const eventsData = await Promise.all(
+        validEventIds.map(async (eventId) => {
+          try {
+            const eventData = await publicClient.readContract({
+              address: TICKET_CITY_ADDR,
+              abi: TICKET_CITY_ABI,
+              functionName: 'getEvent',
+              args: [eventId],
+            });
+
+            console.log(`Event ${eventId} data:`, eventData);
+            return { eventId, eventData };
+          } catch (error) {
+            console.error(`Error fetching event ${eventId}:`, error);
+            return null;
+          }
+        }),
+      );
+
+      // Step 3: Fetch ticket details for each event
+      const formattedEvents = await Promise.all(
+        eventsData
+          .filter((event) => event !== null)
+          .map(async ({ eventId, eventData }) => {
+            // Check if event has ended
+            const hasEnded = Number(eventData.endDate) * 1000 < Date.now();
+
+            // Get ticket details for events
+            let regularPrice = 0;
+            let vipPrice = 0;
+            let hasRegularTicket = false;
+            let hasVIPTicket = false;
+            let hasTicketCreated = false;
+
             try {
-              const eventData = await publicClient.readContract({
+              // Fetch ticket details for both free and paid events
+              const eventTickets = await publicClient.readContract({
                 address: TICKET_CITY_ADDR,
                 abi: TICKET_CITY_ABI,
-                functionName: 'getEvent',
+                functionName: 'eventTickets',
                 args: [eventId],
               });
 
-              console.log(`Event ${eventId} data:`, eventData);
-              return { eventId, eventData };
-            } catch (error) {
-              console.error(`Error fetching event ${eventId}:`, error);
-              return null;
-            }
-          }),
-        );
+              console.log(`Event ${eventId} tickets:`, eventTickets);
 
-        // Step 3: Fetch ticket details for each event
-        const formattedEvents = await Promise.all(
-          eventsData
-            .filter((event) => event !== null)
-            .map(async ({ eventId, eventData }) => {
-              // Check if event has ended
-              const hasEnded = Number(eventData.endDate) * 1000 < Date.now();
-
-              // Get ticket details for events
-              let regularPrice = 0;
-              let vipPrice = 0;
-              let hasRegularTicket = false;
-              let hasVIPTicket = false;
-              let hasTicketCreated = false;
-
-              try {
-                // Fetch ticket details for both free and paid events
-                const eventTickets = await publicClient.readContract({
-                  address: TICKET_CITY_ADDR,
-                  abi: TICKET_CITY_ABI,
-                  functionName: 'eventTickets',
-                  args: [eventId],
-                });
-
-                console.log(`Event ${eventId} tickets:`, eventTickets);
-
-                // Check if ticket data is an array (legacy format) or object (new format)
-                if (Array.isArray(eventTickets)) {
-                  hasRegularTicket = eventTickets[0];
-                  hasVIPTicket = eventTickets[1];
-                  regularPrice = hasRegularTicket ? Number(eventTickets[2]) / 1e18 : 0;
-                  vipPrice = hasVIPTicket ? Number(eventTickets[3]) / 1e18 : 0;
-                } else {
-                  hasRegularTicket = eventTickets.hasRegularTicket;
-                  hasVIPTicket = eventTickets.hasVIPTicket;
-                  regularPrice = hasRegularTicket
-                    ? Number(eventTickets.regularTicketFee) / 1e18
-                    : 0;
-                  vipPrice = hasVIPTicket ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
-                }
-
-                // Check if any ticket type is available
-                hasTicketCreated =
-                  hasRegularTicket || hasVIPTicket || Number(eventData.ticketType) === 0; // Free events are always considered to have tickets
-
-                // For free events, ensure they're marked as having tickets if NFT address exists
-                if (
-                  Number(eventData.ticketType) === 0 &&
-                  eventData.ticketNFTAddr &&
-                  eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
-                ) {
-                  hasTicketCreated = true;
-                }
-              } catch (error) {
-                console.error(`Error fetching ticket details for event ${eventId}:`, error);
-                // For backwards compatibility, check if ticketFee is set
-                if (eventData.ticketFee) {
-                  regularPrice = Number(eventData.ticketFee) / 1e18 || 0;
-                  vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
-                  hasRegularTicket = regularPrice > 0;
-                  hasVIPTicket = false;
-                  hasTicketCreated = hasRegularTicket;
-                }
+              // Check if ticket data is an array (legacy format) or object (new format)
+              if (Array.isArray(eventTickets)) {
+                hasRegularTicket = eventTickets[0];
+                hasVIPTicket = eventTickets[1];
+                regularPrice = hasRegularTicket ? Number(eventTickets[2]) / 1e18 : 0;
+                vipPrice = hasVIPTicket ? Number(eventTickets[3]) / 1e18 : 0;
+              } else {
+                hasRegularTicket = eventTickets.hasRegularTicket;
+                hasVIPTicket = eventTickets.hasVIPTicket;
+                regularPrice = hasRegularTicket ? Number(eventTickets.regularTicketFee) / 1e18 : 0;
+                vipPrice = hasVIPTicket ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
               }
 
-              // Validate and process the image URL
-              let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
+              // Check if any ticket type is available
+              hasTicketCreated =
+                hasRegularTicket || hasVIPTicket || Number(eventData.ticketType) === 0; // Free events are always considered to have tickets
 
-              // Get remaining tickets
-              const remainingTickets =
-                Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
+              // For free events, ensure they're marked as having tickets if NFT address exists
+              if (
+                Number(eventData.ticketType) === 0 &&
+                eventData.ticketNFTAddr &&
+                eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+              ) {
+                hasTicketCreated = true;
+              }
+            } catch (error) {
+              console.error(`Error fetching ticket details for event ${eventId}:`, error);
+              // For backwards compatibility, check if ticketFee is set
+              if (eventData.ticketFee) {
+                regularPrice = Number(eventData.ticketFee) / 1e18 || 0;
+                vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
+                hasRegularTicket = regularPrice > 0;
+                hasVIPTicket = false;
+                hasTicketCreated = hasRegularTicket;
+              }
+            }
 
-              return {
-                id: eventId.toString(),
-                type: getTicketType(eventData),
-                title: eventData.title || 'Untitled Event',
-                description: eventData.desc || 'No description available',
-                location: eventData.location || 'TBD',
-                date: formatDate(eventData.startDate),
-                endDate: formatDate(eventData.endDate),
-                price: {
-                  regular: regularPrice,
-                  vip: vipPrice,
-                },
-                image: imageUrl,
-                organiser: eventData.organiser,
-                attendees: {
-                  registered: Number(eventData.userRegCount),
-                  expected: Number(eventData.expectedAttendees),
-                  verified: Number(eventData.verifiedAttendeesCount),
-                },
-                remainingTickets: remainingTickets,
-                hasEnded: hasEnded,
-                hasTicketCreated: hasTicketCreated, // Added flag to track if tickets are created
-                hasRegularTicket: hasRegularTicket,
-                hasVIPTicket: hasVIPTicket,
-                rawData: eventData, // Keep raw data for debugging
-              };
-            }),
-        );
+            // Validate and process the image URL
+            let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
 
-        console.log('Formatted events:', formattedEvents);
+            // Get remaining tickets
+            const remainingTickets =
+              Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
 
-        // Filter out events that have ended AND ensure at least one ticket is available
-        const activeEvents = formattedEvents.filter(
-          (event) => !event.hasEnded && event.hasTicketCreated,
-        );
+            return {
+              id: eventId.toString(),
+              type: getTicketType(eventData),
+              title: eventData.title || 'Untitled Event',
+              description: eventData.desc || 'No description available',
+              location: eventData.location || 'TBD',
+              date: formatDate(eventData.startDate),
+              endDate: formatDate(eventData.endDate),
+              price: {
+                regular: regularPrice,
+                vip: vipPrice,
+              },
+              image: imageUrl,
+              organiser: eventData.organiser,
+              attendees: {
+                registered: Number(eventData.userRegCount),
+                expected: Number(eventData.expectedAttendees),
+                verified: Number(eventData.verifiedAttendeesCount),
+              },
+              remainingTickets: remainingTickets,
+              hasEnded: hasEnded,
+              hasTicketCreated: hasTicketCreated, // Added flag to track if tickets are created
+              hasRegularTicket: hasRegularTicket,
+              hasVIPTicket: hasVIPTicket,
+              rawData: eventData, // Keep raw data for debugging
+            };
+          }),
+      );
 
-        console.log('Active events with tickets:', activeEvents);
-        setEvents(activeEvents);
-      } catch (error) {
-        console.error('Failed to fetch events:', error);
-      } finally {
+      console.log('Formatted events:', formattedEvents);
+
+      // Filter out events that have ended AND ensure at least one ticket is available
+      const activeEvents = formattedEvents.filter(
+        (event) => !event.hasEnded && event.hasTicketCreated,
+      );
+
+      console.log('Active events with tickets:', activeEvents);
+      setEvents(activeEvents);
+
+      // Update the last updated timestamp
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Failed to fetch events:', error);
+    } finally {
+      if (showLoadingState) {
         setLoading(false);
+      } else {
+        setIsRefreshing(false);
+      }
+    }
+  };
+
+  // Initial fetch - with loading state
+  useEffect(() => {
+    fetchEvents(true);
+  }, []);
+
+  // Set up polling for real-time updates
+  useEffect(() => {
+    // Only set up polling if we have loaded events at least once
+    if (loading && events.length === 0) return;
+
+    // Set up interval to refresh data
+    const pollInterval = setInterval(() => {
+      fetchEvents(false);
+    }, REFRESH_INTERVAL);
+
+    // Clean up interval on component unmount
+    return () => clearInterval(pollInterval);
+  }, [events, loading]);
+
+  // Add visibility change detection to refresh when user returns to tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // User has returned to the tab - refresh data silently
+        fetchEvents(false);
       }
     };
 
-    fetchEvents();
+    // Add event listener for visibility change
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Clean up event listener on component unmount
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  // Manual refresh function
+  const handleManualRefresh = () => {
+    fetchEvents(false);
+  };
 
   // Apply filters and sorting to the events
   const filteredEvents = events.filter((event) => {
@@ -251,25 +301,23 @@ const EventsSection: React.FC = () => {
 
   return (
     <div className="p-6">
-      {/* Header with stats */}
+      {/* Header with refresh indicator */}
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-white mb-4">Upcoming Events</h2>
-        <div className="flex flex-wrap gap-4">
-          <div className="bg-searchBg rounded-lg p-4 flex items-center">
-            <Calendar className="text-primary mr-2" />
-            <div>
-              <p className="text-sm text-textGray">Total Events</p>
-              <p className="text-xl font-bold text-white">{events.length}</p>
-            </div>
-          </div>
-          <div className="bg-searchBg rounded-lg p-4 flex items-center">
-            <Ticket className="text-primary mr-2" />
-            <div>
-              <p className="text-sm text-textGray">Available Events</p>
-              <p className="text-xl font-bold text-white">
-                {events.filter((e) => !e.hasEnded && e.remainingTickets > 0).length}
-              </p>
-            </div>
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Upcoming Events</h2>
+          <div className="flex items-center">
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 text-textGray hover:text-white p-2 rounded-lg hover:bg-searchBg disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="font-inter text-xs text-textGray">
+                {isRefreshing
+                  ? 'Refreshing...'
+                  : `Last updated: ${lastUpdated.toLocaleTimeString()}`}
+              </span>
+            </button>
           </div>
         </div>
       </div>

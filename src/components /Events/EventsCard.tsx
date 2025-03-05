@@ -42,6 +42,37 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
 
   const isGrid = viewMode === 'grid';
 
+  // Check if event has started but not ended
+  const isEventLive = () => {
+    if (!event.rawData) return false;
+
+    const now = Math.floor(Date.now() / 1000); // Current time in seconds
+    const startTime = Number(event.rawData.startDate);
+    const endTime = Number(event.rawData.endDate);
+
+    return now >= startTime && now < endTime;
+  };
+
+  // Get type-specific colors
+  const getTypeColor = () => {
+    switch (type) {
+      case 'Free':
+        return 'bg-green-100 text-green-800';
+      case 'Paid':
+        return 'bg-blue-100 text-blue-800';
+      case 'VIP':
+        return 'bg-purple-100 text-purple-800';
+      case 'Regular':
+        return 'bg-orange-100 text-orange-800';
+      case 'Virtual':
+        return 'bg-indigo-100 text-indigo-800';
+      case 'In-Person':
+        return 'bg-rose-100 text-rose-800';
+      default:
+        return 'bg-white text-primary';
+    }
+  };
+
   return (
     <Link
       to={`/event/${id}`}
@@ -69,9 +100,18 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
           className="w-full h-full object-cover"
           onError={handleImageError}
         />
-        <div className="absolute top-4 left-4 bg-white rounded-full px-3 py-1">
-          <span className="text-sm font-inter">{type}</span>
+        {/* Type label with dynamic color */}
+        <div className={`absolute top-4 left-4 rounded-full px-3 py-1 ${getTypeColor()}`}>
+          <span className="text-sm font-inter font-medium">{type}</span>
         </div>
+
+        {/* Live indicator */}
+        {isEventLive() && (
+          <div className="absolute top-4 right-4 bg-black bg-opacity-70 rounded-full px-3 py-1 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-sm font-inter text-white font-medium">LIVE</span>
+          </div>
+        )}
       </div>
 
       {/* Content Section */}
@@ -84,11 +124,11 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
 
         <div className="space-y-2 mb-4">
           <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-textGray" />
+            <MapPin className="w-4 h-4 text-primary" />
             <span className="font-inter text-sm text-textGray">{location}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-textGray" />
+            <Calendar className="w-4 h-4 text-primary" />
             <span className="font-inter text-sm text-textGray">{date}</span>
           </div>
         </div>
@@ -99,8 +139,14 @@ const EventCard: React.FC<EventCardProps> = ({ event, viewMode = 'grid' }) => {
         `}
         >
           <div className="font-inter font-semibold text-primary">
-            {regularPrice} ETN
-            {vipPrice > 0 && <span className="ml-2 text-textGray">(VIP: {vipPrice} ETN)</span>}
+            {regularPrice === 0 ? (
+              'Free Ticket'
+            ) : (
+              <>
+                REGULAR: {regularPrice} ETN <span className="text-white">||</span>
+                {vipPrice > 0 && <span className="ml-2 text-primary">VIP: {vipPrice} ETN</span>}
+              </>
+            )}
           </div>
 
           <button
