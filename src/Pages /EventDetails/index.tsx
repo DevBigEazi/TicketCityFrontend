@@ -243,32 +243,6 @@ const EventDetails = () => {
     }
   }, [eventId, authenticated, wallets]);
 
-  // Set up polling for real-time updates
-  useEffect(() => {
-    // Only set up polling if we have successfully loaded the event once
-    if (!event) return;
-
-    //   retrieve it when loading the component
-
-    const savedHash = localStorage.getItem(`event_${event.id}_txHash`);
-    if (savedHash) {
-      setTransactionHash(savedHash);
-    }
-    // Set up an interval to refresh data every 30 seconds
-    const pollInterval = setInterval(() => {
-      // Call loadEventDetails without showing loading state
-      loadEventDetails(false);
-
-      // Also refresh balance if authenticated
-      if (authenticated && wallets && wallets[0]?.address) {
-        getETNBalance();
-      }
-    }, 30000); // 30 seconds refresh interval
-
-    // Clean up interval on component unmount
-    return () => clearInterval(pollInterval);
-  }, [event, authenticated, wallets, event?.id]);
-
   // Add visibility change detection to refresh data when user returns to tab
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -500,12 +474,6 @@ const EventDetails = () => {
     return <NoEventState navigate={navigate} />;
   }
 
-  const LastUpdatedIndicator = () => (
-    <div className="text-xs text-gray-400 text-center mt-2">
-      Last updated: {lastUpdated.toLocaleTimeString()}
-    </div>
-  );
-
   const TicketTypeSelector = () => {
     // Determine what options should be available
     const isPaidEvent = event && Number(event.ticketType) === EventType.PAID;
@@ -583,12 +551,7 @@ const EventDetails = () => {
     </div>
   );
 
-  // Ticket owned component
-  // In TicketOwnedSection component, remove the export statement
-
-  // Ticket owned component
-  // Update the TicketOwnedSection component to display the transaction hash
-
+  // The TicketOwnedSection component to display the transaction hash
   const TicketOwnedSection = () => {
     const ticketRef = React.useRef(null);
 
@@ -872,7 +835,6 @@ const EventDetails = () => {
               ? 'Event is live now!'
               : 'Event has ended'}
           </p>
-          <LastUpdatedIndicator />
         </div>
 
         {/* Banner Image */}

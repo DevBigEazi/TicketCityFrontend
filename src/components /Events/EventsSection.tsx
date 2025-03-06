@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutGrid, List, Calendar, Ticket, RefreshCw } from 'lucide-react';
+import { LayoutGrid, List, RefreshCw } from 'lucide-react';
 import EventCard from './EventsCard';
 import { Event, EventFilter, ViewMode } from '../../types';
 import TICKET_CITY_ABI from '../../abi/abi.json';
@@ -26,11 +26,32 @@ const EventsSection: React.FC = () => {
   // Helper function to format Unix timestamp to readable date
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'TBD';
-    const date = new Date(Number(timestamp) * 1000);
-    return `${date.toLocaleDateString()} | ${date.toLocaleTimeString([], {
+    
+    const eventDate = new Date(Number(timestamp) * 1000);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Reset hours to compare just the dates
+    const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const tomorrowDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+    
+    // Format the time portion
+    const timeString = eventDate.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
-    })}`;
+    });
+    
+    // Check if event is today or tomorrow
+    if (eventDay.getTime() === todayDay.getTime()) {
+      return `Today | ${timeString}`;
+    } else if (eventDay.getTime() === tomorrowDay.getTime()) {
+      return `Tomorrow | ${timeString}`;
+    } else {
+      // For other dates, use the standard format
+      return `${eventDate.toLocaleDateString()} | ${timeString}`;
+    }
   };
 
   // Enhanced to better match contract's ticket type structure

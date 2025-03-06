@@ -99,14 +99,6 @@ const PurchaseTicketSection = ({
         }
       }
 
-      // For debugging
-      console.log({
-        isFreeEvent,
-        selectedTicketType,
-        ticketCategory,
-        ticketPrice: ticketPrice.toString(),
-      });
-
       // Verify user has enough balance
       const balanceWei = await publicClient.getBalance({
         address: wallets[0].address,
@@ -176,16 +168,7 @@ const PurchaseTicketSection = ({
   };
 
   // Ticket Type Selector Component
-  const TicketTypeSelector = () => {
-    console.log("TicketTypeSelector rendering with options:", {
-      isPaidEvent,
-      hasRegularOption,
-      hasVipOption,
-      eventType: event?.ticketType,
-      regularTicketFee: event?.ticketsData?.regularTicketFee?.toString(),
-      vipTicketFee: event?.ticketsData?.vipTicketFee?.toString(),
-    });
-    
+  const TicketTypeSelector = () => {    
     return (
       <div>
         <label className="font-inter text-medium text-white block mb-2">Choose Ticket Type:</label>
