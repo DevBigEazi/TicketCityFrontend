@@ -9,7 +9,7 @@ import ManageEventsPage from './Pages /ManageEventsPage';
 import EventsDashboardPage from './Pages /EventsDashboardPage';
 import './App.css';
 import { usePrivy } from '@privy-io/react-auth';
-import FreeEventDetails from './Pages /EventDetails';
+import EventDetails from './Pages /EventDetails';
 
 const App: React.FC = () => {
   const { ready } = usePrivy();
@@ -33,7 +33,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<ExploreEvents />} />
         <Route path="/explore" element={<ExploreEvents />} />
-        <Route path="/event/:eventId" element={<FreeEventDetails />} />
+        <Route path="/event/:eventId" element={<EventDetails />} />
         <Route path="/create-event" element={<CreateEventForm />} />
         <Route path="/event-preview" element={<EventPreview />} />
         <Route path="/published-events" element={<PublishedEvents />} />
