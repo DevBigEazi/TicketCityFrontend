@@ -3,35 +3,26 @@ import {
   LayoutDashboard,
   Compass,
   PlusCircle,
-  Ticket,
   Wallet,
   Shield,
   Users,
   Settings,
   ChevronDown,
+  CalendarCheck,
 } from 'lucide-react';
 import { useUser } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { NavLink } from '../../types';
 import { maskEmail } from '../../utils/maskedEmail';
 
-const navLinks: NavLink[] = [
-  {
-    icon: <LayoutDashboard size={24} />,
-    label: 'Dashboard',
-    path: '/dashboard',
-  },
-  { icon: <Compass size={24} />, label: 'Explore Events', path: '/explore' },
-  {
-    icon: <PlusCircle size={24} />,
-    label: 'Create Event',
-    path: '/create-event',
-  },
-  { icon: <Ticket size={24} />, label: 'My Tickets', path: '/tickets' },
-  { icon: <Wallet size={24} />, label: 'My Wallet', path: '/wallet' },
-  { icon: <Shield size={24} />, label: 'Ticket Verification', path: '/verify' },
-  { icon: <Users size={24} />, label: 'Organizers Hub', path: '/organizers' },
-  { icon: <Settings size={24} />, label: 'Settings', path: '/settings' },
+const navLinks = [
+  { icon: <LayoutDashboard />, label: 'Dashboard', path: '/dashboard' },
+  { icon: <Compass />, label: 'Explore Events', path: '/explore' },
+  { icon: <PlusCircle />, label: 'Create Event', path: '/create-event' },
+  { icon: <CalendarCheck />, label: 'My Events', path: '/my-events' },
+  { icon: <Wallet />, label: 'My Wallet', path: '/wallet' },
+  { icon: <Shield />, label: 'Ticket Verification', path: '/verify' },
+  { icon: <Users />, label: 'Organizers Hub', path: '/organizers' },
+  { icon: <Settings />, label: 'Settings', path: '/settings' },
 ];
 
 const Sidebar: React.FC = () => {

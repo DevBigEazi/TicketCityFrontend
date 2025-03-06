@@ -8,7 +8,6 @@ import {
 } from '../../utils/client';
 import { formatEther, parseEther } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
-import { pinata } from '../../utils/pinata';
 
 // Define enums for ticket types to match the contract
 const EventType = {
@@ -22,7 +21,7 @@ const PaidTicketCategory = {
   VIP: 2,
 };
 
-// Create a ticket creation component
+// ticket creation component
 const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoading }) => {
   const { wallets } = useWallets();
   const publicClient = createPublicClientInstance();
@@ -46,35 +45,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
     currentType: null,
   });
 
-  // Handle image upload
-  const handleImageUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      try {
-        setCreationStatus({ ...creationStatus, loading: true, error: null });
-
-        // Upload image to IPFS
-        const upload = await pinata.upload.file(file);
-        const ipfsUrl = await pinata.gateways.convert(upload.IpfsHash);
-
-        setTicketState((prevState) => ({
-          ...prevState,
-          image: file,
-          imageUrl: ipfsUrl,
-          ticketUrl: ipfsUrl, // Also set ticket URL to use the IPFS link
-        }));
-
-        setCreationStatus({ ...creationStatus, loading: false });
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        setCreationStatus({
-          ...creationStatus,
-          loading: false,
-          error: `Failed to upload image: ${error.message || 'Unknown error'}`,
-        });
-      }
-    }
-  };
+  //
 
   // Handle ticket type and price changes
   const handleTicketChange = (field, value) => {
@@ -119,15 +90,6 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
       setCreationStatus({
         ...creationStatus,
         error: 'Event details not available or wallet not connected',
-      });
-      return;
-    }
-
-    // Validate input fields
-    if (!ticketState.ticketUrl && !ticketState.imageUrl) {
-      setCreationStatus({
-        ...creationStatus,
-        error: 'Please upload a ticket image or provide a ticket URL',
       });
       return;
     }
@@ -190,7 +152,7 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
       const walletClient = createWalletClientInstance(provider);
 
       // Use image URL if available, otherwise use provided ticket URL
-      const ticketUri = ticketState.imageUrl || ticketState.ticketUrl;
+      const ticketUri = ticketState.imageUrl;
 
       // Determine the appropriate ticket category and price based on event type
       let ticketCategory;
@@ -359,15 +321,6 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="font-inter text-medium text-white block mb-2">
-                Upload Ticket Image:
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
-              />
               {ticketState.imageUrl && (
                 <div className="mt-2">
                   <img
@@ -486,28 +439,6 @@ const TicketCreationSection = ({ event, fetchEventDetails, isLoading, setIsLoadi
             </select>
           </div>
         )}
-
-        {/* Image upload */}
-        <div>
-          <label className="font-inter text-medium text-white block mb-2">
-            Upload Ticket Image:
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageUpload}
-            className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
-          />
-          {ticketState.imageUrl && (
-            <div className="mt-2">
-              <img
-                src={ticketState.imageUrl}
-                alt="Ticket preview"
-                className="w-full h-40 object-cover rounded-lg"
-              />
-            </div>
-          )}
-        </div>
 
         {/* Display only relevant price field based on which ticket can be created */}
         {canCreateRegular && (!canCreateVIP || ticketState.type === 'REGULAR') && (

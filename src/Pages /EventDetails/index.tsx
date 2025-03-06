@@ -1,3 +1,4 @@
+import React from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle } from 'lucide-react';
@@ -11,6 +12,7 @@ import { formatEther } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import TicketCreationSection from '../../components /Events/TicketCreationSection';
 import EventDetailsFooter from '../../components /Events/EventDetailsFooter';
+import { pinata } from '../../utils/pinata';
 
 // Enums for ticket types to match the contract
 const EventType = {
@@ -90,6 +92,10 @@ const EventDetails = () => {
   const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
   const [purchaseError, setPurchaseError] = useState(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [transactionHash, setTransactionHash] = useState('');
+
+  // Add new state for tracking last update time
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   const publicClient = createPublicClientInstance();
 
@@ -112,14 +118,17 @@ const EventDetails = () => {
   };
 
   // Fetch event details directly from the contract
-  const loadEventDetails = async () => {
+  const loadEventDetails = async (showLoadingState = false) => {
     if (!eventId) {
       setIsLoading(false);
       setError('Event ID not provided');
       return;
     }
 
-    setIsLoading(true);
+    // Only show loading state on initial load or when explicitly requested
+    if (showLoadingState) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -212,6 +221,9 @@ const EventDetails = () => {
       } else {
         setAttendanceRate('0%');
       }
+
+      // Update the last updated timestamp
+      setLastUpdated(new Date());
     } catch (error) {
       setError(`Failed to fetch event details: ${error.message || 'Unknown error'}`);
       setEvent(null); // Reset event state on error
@@ -220,15 +232,37 @@ const EventDetails = () => {
     }
   };
 
+  // Use this effect for the initial load
   useEffect(() => {
-    // Always fetch event details first
-    loadEventDetails();
+    // Always fetch event details first with loading state shown
+    loadEventDetails(true);
 
     // Then fetch user-specific data if authenticated
     if (authenticated && wallets && wallets[0]?.address) {
       getETNBalance();
     }
   }, [eventId, authenticated, wallets]);
+
+  // Add visibility change detection to refresh data when user returns to tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // User has returned to the tab - refresh data
+        loadEventDetails(false);
+        if (authenticated && wallets && wallets[0]?.address) {
+          getETNBalance();
+        }
+      }
+    };
+
+    // Add event listener for visibility change
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Clean up event listener on component unmount
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [authenticated, wallets]);
 
   // Format date from timestamp
   const formatDate = (timestamp) => {
@@ -267,10 +301,10 @@ const EventDetails = () => {
       } else {
         // For PAID events, use the selected ticket type
         if (selectedTicketType === 'REGULAR' && event.ticketsData.hasRegularTicket) {
-          ticketCategory = PaidTicketCategory.REGULAR; // This is index 1 in the enum
+          ticketCategory = PaidTicketCategory.REGULAR;
           ticketPrice = event.ticketsData.regularTicketFee;
         } else if (selectedTicketType === 'VIP' && event.ticketsData.hasVIPTicket) {
-          ticketCategory = PaidTicketCategory.VIP; // This is index 2 in the enum
+          ticketCategory = PaidTicketCategory.VIP;
           ticketPrice = event.ticketsData.vipTicketFee;
         } else {
           throw new Error('Selected ticket type is not available for this event');
@@ -287,10 +321,55 @@ const EventDetails = () => {
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'purchaseTicket',
-          args: [event.id, ticketCategory], // Using the numeric enum value
+          args: [event.id, ticketCategory],
           value: ticketPrice,
           account: wallets[0].address,
         });
+
+        // Set transaction hash in state
+        setTransactionHash(hash);
+
+        // Store transaction hash in localStorage as immediate solution
+        localStorage.setItem(`event_${event.id}_user_${wallets[0].address}_ticket_tx`, hash);
+
+        // Create ticket metadata for Pinata
+        const ticketMetadata = {
+          eventId: event.id,
+          eventTitle: event.title,
+          purchaseDate: new Date().toISOString(),
+          userAddress: wallets[0].address,
+          ticketType: selectedTicketType,
+          ticketCategory: ticketCategory,
+          ticketPrice: ticketPrice.toString(),
+          transactionHash: hash,
+        };
+
+        // Convert metadata to a file for Pinata upload
+        const metadataBlob = new Blob([JSON.stringify(ticketMetadata)], {
+          type: 'application/json',
+        });
+
+        const metadataFile = new File(
+          [metadataBlob],
+          `event-${event.id}-user-${wallets[0].address.slice(0, 6)}-ticket.json`,
+        );
+
+        // Upload metadata to Pinata (non-blocking)
+        pinata.upload
+          .file(metadataFile)
+          .then((upload) => {
+            const ipfsHash = upload.IpfsHash;
+            console.log(`Ticket metadata stored on IPFS with hash: ${ipfsHash}`);
+
+            // Store the IPFS hash for future retrieval
+            localStorage.setItem(
+              `event_${event.id}_user_${wallets[0].address}_ticket_metadata`,
+              ipfsHash,
+            );
+          })
+          .catch((err) => {
+            console.error('Failed to store ticket metadata on IPFS:', err);
+          });
 
         // Wait for transaction confirmation
         const receipt = await publicClient.waitForTransactionReceipt({
@@ -325,6 +404,60 @@ const EventDetails = () => {
       setIsPurchasing(false);
     }
   };
+
+  const loadTicketTransactionHash = async () => {
+    if (!event || !wallets || !wallets[0]?.address) return;
+
+    try {
+      // First check localStorage for the transaction hash (fastest method)
+      const storedHash = localStorage.getItem(
+        `event_${event.id}_user_${wallets[0].address}_ticket_tx`,
+      );
+
+      if (storedHash) {
+        setTransactionHash(storedHash);
+        return;
+      }
+
+      // If no direct hash, try to get from IPFS via stored metadata hash
+      const metadataHash = localStorage.getItem(
+        `event_${event.id}_user_${wallets[0].address}_ticket_metadata`,
+      );
+
+      if (metadataHash) {
+        try {
+          // Fetch from Pinata using the hash
+          const metadataUrl = await pinata.gateways.convert(metadataHash);
+          const response = await fetch(metadataUrl);
+
+          if (response.ok) {
+            const metadata = await response.json();
+
+            // Set transaction hash from metadata
+            if (metadata.transactionHash) {
+              setTransactionHash(metadata.transactionHash);
+
+              // Save back to localStorage for future faster retrieval
+              localStorage.setItem(
+                `event_${event.id}_user_${wallets[0].address}_ticket_tx`,
+                metadata.transactionHash,
+              );
+            }
+          }
+        } catch (ipfsError) {
+          console.error('Error fetching ticket metadata from IPFS:', ipfsError);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading ticket transaction hash:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (event && hasTicket && wallets && wallets[0]?.address) {
+      loadTicketTransactionHash();
+    }
+  }, [event, hasTicket, wallets]);
 
   // Render loading state
   if (isLoading) {
@@ -418,27 +551,189 @@ const EventDetails = () => {
     </div>
   );
 
-  // Ticket owned component
-  const TicketOwnedSection = () => (
-    <div className="rounded-lg border border-borderStroke p-6 bg-gradient-to-r from-green-900/30 to-primary/20">
-      <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
-        🎟️ You Own a Ticket!
-      </h2>
-      <p className="font-inter text-medium text-white mb-4">
-        Your NFT ticket has been minted to your wallet. You can use this ticket to attend the event.
-      </p>
-      <div className="space-y-2">
-        <p className="font-inter text-medium text-white">
-          Ticket NFT Address:{' '}
-          {event.ticketNFTAddr &&
-          event.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
-            ? `${event.ticketNFTAddr.slice(0, 6)}...${event.ticketNFTAddr.slice(-4)}`
-            : 'Not available'}
-        </p>
-        <p className="font-inter text-medium text-white">✅ Entry Status: Ready for check-in</p>
+  // The TicketOwnedSection component to display the transaction hash
+  const TicketOwnedSection = () => {
+    const ticketRef = React.useRef(null);
+
+    // Function to download ticket as an image
+    const downloadTicketAsImage = () => {
+      import('html-to-image').then((htmlToImage) => {
+        if (ticketRef.current === null) {
+          return;
+        }
+
+        // Add a small delay to ensure the component is fully rendered
+        setTimeout(() => {
+          htmlToImage
+            .toPng(ticketRef.current, {
+              quality: 2.0,
+              backgroundColor: '#0F0B18',
+              width: ticketRef.current.offsetWidth,
+              height: ticketRef.current.offsetHeight,
+              cacheBust: true,
+              // Improve image quality
+              pixelRatio: 2,
+            })
+            .then((dataUrl) => {
+              const link = document.createElement('a');
+              link.download = `${event.title}-Ticket.png`;
+              link.href = dataUrl;
+              link.click();
+            })
+            .catch((error) => {
+              console.error('Error generating ticket image:', error);
+              alert('Failed to download ticket. Please try again.');
+            });
+        }, 100); // 100ms delay
+      });
+    };
+
+    return (
+      <div className="max-w-3xl mx-auto rounded-2xl border border-[#8A20FF] p-6 bg-[#6A00F4] shadow-lg overflow-hidden">
+        {/* Ticket Header */}
+        <div className="text-center mb-4 border-b border-dotted border-purple-300 pb-3">
+          <div className="flex items-center justify-center mb-2">
+            <h2 className="font-poppins text-xl text-white">🎉 You Own a Ticket!</h2>
+          </div>
+          <p className="text-xs text-purple-200">Powered by Blockchain</p>
+        </div>
+
+        {/* Ticket Content */}
+        <div ref={ticketRef} className="bg-[#0F0B18] rounded-xl p-6 mb-4">
+          <h3 className="font-poppins text-xl text-white mb-4 text-center">{event.title}</h3>
+
+          <div className="space-y-3 mb-6">
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Date:</span>
+              <span className="text-white text-sm">{formatDate(event.startDate)}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Location:</span>
+              <span className="text-white text-sm">{event.location || 'Virtual Event'}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Time:</span>
+              <span className="text-white text-sm">{formatTime(event.startDate)}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Seat No:</span>
+              <span className="text-white text-sm">A{event.userRegCount}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">
+                <span className="text-red-400 mr-1">🎫</span>
+                Ticket Type:
+              </span>
+              <span className="text-white text-sm">
+                {event.ticketType === EventType.FREE
+                  ? 'FREE'
+                  : selectedTicketType === 'VIP'
+                  ? 'VIP'
+                  : 'REGULAR'}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Price:</span>
+              <span className="text-white text-sm">
+                {event.ticketType === EventType.FREE
+                  ? 'FREE'
+                  : `${formatEther(event.ticketsData?.regularTicketFee || '0')} ETN`}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Transaction ID:</span>
+              <span className="text-white text-sm truncate">
+                {wallets?.[0]?.address
+                  ? `${wallets[0].address.slice(0, 6)}...${wallets[0].address.slice(-4)}`
+                  : '0x...0000'}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Transaction Hash:</span>
+              <span className="text-white text-sm truncate">
+                {transactionHash
+                  ? `${transactionHash.slice(0, 6)}...${transactionHash.slice(-4)}`
+                  : 'N/A'}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-gray-300 text-sm">Entry Status:</span>
+              <span className="text-green-400 text-sm">Ready for check-in ✅</span>
+            </div>
+          </div>
+
+          {/* QR Code */}
+          <div className="flex justify-center items-center mb-2">
+            <div className="bg-white p-2 rounded-lg w-32 h-32 flex justify-center items-center">
+              <div className="text-purple-900 text-center text-xs">
+                <div className="grid grid-cols-4 grid-rows-4 gap-1">
+                  {Array(16)
+                    .fill(0)
+                    .map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-6 h-6 ${Math.random() > 0.5 ? 'bg-purple-900' : 'bg-white'}`}
+                      ></div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-white text-center text-sm mb-4">Scan to Verify</p>
+        </div>
+
+        {/* Download Button */}
+        <div className="flex justify-center">
+          <button
+            onClick={downloadTicketAsImage}
+            className="bg-yellow-400 hover:bg-yellow-500 text-purple-900 font-bold py-2 px-6 rounded-full transition-all duration-200 transform hover:scale-105 active:scale-95"
+          >
+            Download Ticket
+          </button>
+        </div>
+
+        {/* Ticket Details */}
+        <div className="mt-6 text-sm text-purple-200">
+          <p className="mb-2">
+            <span className="font-semibold">Ticket NFT Address:</span>{' '}
+            {event.ticketNFTAddr &&
+            event.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+              ? `${event.ticketNFTAddr.slice(0, 6)}...${event.ticketNFTAddr.slice(-4)}`
+              : 'Not available'}
+          </p>
+          <p>
+            Your NFT ticket has been minted to your wallet. Present this ticket at the event
+            entrance for verification.
+          </p>
+
+          {/* Transaction Hash Details - Only show if available */}
+          {transactionHash && (
+            <div className="mt-4 p-3 bg-purple-900/30 rounded-lg">
+              <p className="mb-1 font-semibold">Transaction Details:</p>
+              <p className="break-all text-xs">Hash: {transactionHash}</p>
+              <a
+                href={`https://sepolia.basescan.org/tx/${transactionHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-yellow-300 hover:text-yellow-400 text-xs inline-block mt-1"
+              >
+                View on Blockchain Explorer →
+              </a>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Purchase ticket section component
   const PurchaseTicketSection = () => (
@@ -521,9 +816,25 @@ const EventDetails = () => {
           </div>
           <p className="gradient-text font-inter text-medium">
             {new Date() < new Date(Number(event.startDate) * 1000)
-              ? `Event starts in: ${Math.ceil(
-                  (Number(event.startDate) * 1000 - Date.now()) / (1000 * 60 * 60 * 24),
-                )} days`
+              ? (() => {
+                  const timeRemaining = Number(event.startDate) * 1000 - Date.now();
+                  const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
+                  const hours = Math.floor(
+                    (timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+                  );
+                  const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+                  const seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+
+                  if (days > 0) {
+                    return `Event starts in: ${days} day${days !== 1 ? 's' : ''}`;
+                  } else if (hours > 0) {
+                    return `Event starts in: ${hours} hour${hours !== 1 ? 's' : ''}`;
+                  } else if (minutes > 0) {
+                    return `Event starts in: ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                  } else {
+                    return `Event starts in: ${seconds} second${seconds !== 1 ? 's' : ''}`;
+                  }
+                })()
               : new Date() < new Date(Number(event.endDate) * 1000)
               ? 'Event is live now!'
               : 'Event has ended'}

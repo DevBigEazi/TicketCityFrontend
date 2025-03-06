@@ -288,8 +288,6 @@ const EventPreview = () => {
       <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
         <h1 className="text-white text-2xl font-bold mb-4 text-center">Event Preview</h1>
 
-        {error && <div className="bg-red-500 text-white p-4 rounded-lg mb-4">{error}</div>}
-
         {/* Event Details */}
         <div className="border border-borderStroke p-6 rounded-lg bg-searchBg">
           {eventData.image && (
@@ -321,6 +319,8 @@ const EventPreview = () => {
             <strong>Description:</strong> {eventData.description}
           </p>
         </div>
+
+        {error && <div className="bg-red-500 text-white p-4 rounded-lg mb-4">{error}</div>}
 
         {/* Action Buttons */}
         <div className="flex justify-between mt-8">
