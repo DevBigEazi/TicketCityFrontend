@@ -566,7 +566,7 @@ const EventDetails = () => {
         setTimeout(() => {
           htmlToImage
             .toPng(ticketRef.current, {
-              quality: 1.0,
+              quality: 2.0,
               backgroundColor: '#0F0B18',
               width: ticketRef.current.offsetWidth,
               height: ticketRef.current.offsetHeight,
@@ -629,7 +629,11 @@ const EventDetails = () => {
                 Ticket Type:
               </span>
               <span className="text-white text-sm">
-                {event.ticketType === EventType.FREE ? 'FREE' : 'REGULAR'}
+                {event.ticketType === EventType.FREE
+                  ? 'FREE'
+                  : selectedTicketType === 'VIP'
+                  ? 'VIP'
+                  : 'REGULAR'}
               </span>
             </div>
 
