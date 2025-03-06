@@ -24,6 +24,35 @@ export type EventFilter = 'Regular' | 'All' | 'Free' | 'Paid' | 'VIP' | 'Virtual
 //   organiser: string; // Added organiser field for routing
 // }
 
+// export interface Event {
+//   id: string;
+//   type: string;
+//   title: string;
+//   description: string;
+//   location: string;
+//   date: string;
+//   isVerified?: boolean;
+//   hasNotStarted? :
+//   endDate: string;
+//   price: {
+//     regular: number;
+//     vip: number;
+//   };
+//   image: string;
+//   organiser: string;
+//   attendees: {
+//     registered: number;
+//     expected: number;
+//     verified: number;
+//   };
+//   remainingTickets: number;
+//   hasEnded: boolean;
+//   hasTicketCreated: boolean;
+//   hasRegularTicket: boolean;
+//   hasVIPTicket: boolean;
+//   rawData: any;
+// }
+
 export interface Event {
   id: string;
   type: string;
@@ -48,9 +77,8 @@ export interface Event {
   hasTicketCreated: boolean;
   hasRegularTicket: boolean;
   hasVIPTicket: boolean;
-  rawData: any;
+  rawData: unknown;
 }
-
 export interface FooterSection {
   title: string;
   links: string[];
