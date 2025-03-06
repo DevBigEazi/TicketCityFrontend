@@ -232,6 +232,108 @@ const EventDetails = () => {
     }
   };
 
+  const getUserTicketCategory = async (eventId, userAddress) => {
+    if (!eventId || !userAddress) return null;
+
+    try {
+      // First check if the user has a VIP ticket
+      const tickets = await publicClient.readContract({
+        address: TICKET_CITY_ADDR,
+        abi: TICKET_CITY_ABI,
+        functionName: 'eventTickets',
+        args: [eventId],
+      });
+
+      let ticketType = null;
+
+      // If user has a VIP ticket
+      if (tickets[1] && tickets[4]) {
+        // hasVIPTicket and ticketNFT exists
+        try {
+          const vipBalance = await publicClient.readContract({
+            address: tickets[4], // VIP ticket NFT address
+            abi: [
+              {
+                inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+                name: 'balanceOf',
+                outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+                stateMutability: 'view',
+                type: 'function',
+              },
+            ],
+            functionName: 'balanceOf',
+            args: [userAddress],
+          });
+
+          if (vipBalance > 0) {
+            return 'VIP';
+          }
+        } catch (error) {
+          console.error('Error checking VIP ticket balance:', error);
+        }
+      }
+
+      // If user has a REGULAR ticket
+      if (tickets[0] && tickets[3]) {
+        // hasRegularTicket and ticketNFT exists
+        try {
+          const regularBalance = await publicClient.readContract({
+            address: tickets[3], // Regular ticket NFT address
+            functionName: 'balanceOf',
+            abi: [
+              {
+                inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+                name: 'balanceOf',
+                outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+                stateMutability: 'view',
+                type: 'function',
+              },
+            ],
+            args: [userAddress],
+          });
+
+          if (regularBalance > 0) {
+            return 'REGULAR';
+          }
+        } catch (error) {
+          console.error('Error checking REGULAR ticket balance:', error);
+        }
+      }
+
+      // Get event details to check if it's a FREE event
+      const eventData = await publicClient.readContract({
+        address: TICKET_CITY_ADDR,
+        abi: TICKET_CITY_ABI,
+        functionName: 'getEvent',
+        args: [eventId],
+      });
+
+      // If it's a FREE event
+      if (Number(eventData.ticketType) === 0) {
+        // FREE ticket type
+        return 'FREE';
+      }
+
+      // If we still don't know the type but user has registered
+      const hasRegistered = await publicClient.readContract({
+        address: TICKET_CITY_ADDR,
+        abi: TICKET_CITY_ABI,
+        functionName: 'hasRegistered',
+        args: [userAddress, eventId],
+      });
+
+      if (hasRegistered) {
+        // The user has a ticket, but we couldn't determine the type
+        return 'UNKNOWN';
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting user ticket category:', error);
+      return null;
+    }
+  };
+
   // Use this effect for the initial load
   useEffect(() => {
     // Always fetch event details first with loading state shown
@@ -552,8 +654,134 @@ const EventDetails = () => {
   );
 
   // The TicketOwnedSection component to display the transaction hash
+  // The TicketOwnedSection component to display the transaction hash
   const TicketOwnedSection = () => {
     const ticketRef = React.useRef(null);
+    const [userTicketType, setUserTicketType] = useState('');
+    const [isLoadingTicketType, setIsLoadingTicketType] = useState(true);
+
+    // Fetch the user's actual ticket type when component mounts
+    useEffect(() => {
+      const fetchUserTicketType = async () => {
+        if (!event || !wallets || !wallets[0]?.address) return;
+
+        setIsLoadingTicketType(true);
+        try {
+          // Get event tickets data
+          const eventTicketsData = await publicClient.readContract({
+            address: TICKET_CITY_ADDR,
+            abi: TICKET_CITY_ABI,
+            functionName: 'eventTickets',
+            args: [event.id],
+          });
+
+          // Format ticket data
+          const ticketsData = {
+            hasRegularTicket: eventTicketsData[0],
+            hasVIPTicket: eventTicketsData[1],
+            regularTicketFee: eventTicketsData[2],
+            vipTicketFee: eventTicketsData[3],
+            regularTicketNFT: eventTicketsData[3], // Regular ticket NFT address
+            vipTicketNFT: eventTicketsData[4], // VIP ticket NFT address
+          };
+
+          // Check if user has registered for the event
+          const hasRegistered = await publicClient.readContract({
+            address: TICKET_CITY_ADDR,
+            abi: TICKET_CITY_ABI,
+            functionName: 'hasRegistered',
+            args: [wallets[0].address, event.id],
+          });
+
+          if (!hasRegistered) {
+            setUserTicketType('Not Registered');
+            return;
+          }
+
+          // For FREE events
+          if (Number(event.ticketType) === EventType.FREE) {
+            setUserTicketType('FREE');
+            return;
+          }
+
+          // For PAID events - Check VIP first
+          if (ticketsData.hasVIPTicket && ticketsData.vipTicketNFT) {
+            try {
+              const vipBalance = await publicClient.readContract({
+                address: ticketsData.vipTicketNFT,
+                abi: [
+                  {
+                    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+                    name: 'balanceOf',
+                    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+                    stateMutability: 'view',
+                    type: 'function',
+                  },
+                ],
+                functionName: 'balanceOf',
+                args: [wallets[0].address],
+              });
+
+              if (vipBalance > 0) {
+                setUserTicketType('VIP');
+                return;
+              }
+            } catch (error) {
+              console.error('Error checking VIP ticket balance:', error);
+            }
+          }
+
+          // Then check REGULAR
+          if (ticketsData.hasRegularTicket && ticketsData.regularTicketNFT) {
+            try {
+              const regularBalance = await publicClient.readContract({
+                address: ticketsData.regularTicketNFT,
+                abi: [
+                  {
+                    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+                    name: 'balanceOf',
+                    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+                    stateMutability: 'view',
+                    type: 'function',
+                  },
+                ],
+                functionName: 'balanceOf',
+                args: [wallets[0].address],
+              });
+
+              if (regularBalance > 0) {
+                setUserTicketType('REGULAR');
+                return;
+              }
+            } catch (error) {
+              console.error('Error checking REGULAR ticket balance:', error);
+            }
+          }
+
+          // If we got here but user is registered, default to REGULAR for backward compatibility
+          setUserTicketType('REGULAR');
+        } catch (error) {
+          console.error('Error fetching user ticket type:', error);
+          // If user is registered but we can't determine type, default to REGULAR
+          if (
+            await publicClient.readContract({
+              address: TICKET_CITY_ADDR,
+              abi: TICKET_CITY_ABI,
+              functionName: 'hasRegistered',
+              args: [wallets[0].address, event.id],
+            })
+          ) {
+            setUserTicketType('REGULAR');
+          } else {
+            setUserTicketType('UNKNOWN');
+          }
+        } finally {
+          setIsLoadingTicketType(false);
+        }
+      };
+
+      fetchUserTicketType();
+    }, [event, wallets]);
 
     // Function to download ticket as an image
     const downloadTicketAsImage = () => {
@@ -629,11 +857,7 @@ const EventDetails = () => {
                 Ticket Type:
               </span>
               <span className="text-white text-sm">
-                {event.ticketType === EventType.FREE
-                  ? 'FREE'
-                  : selectedTicketType === 'VIP'
-                  ? 'VIP'
-                  : 'REGULAR'}
+                {isLoadingTicketType ? 'Loading...' : userTicketType}
               </span>
             </div>
 
@@ -642,7 +866,11 @@ const EventDetails = () => {
               <span className="text-white text-sm">
                 {event.ticketType === EventType.FREE
                   ? 'FREE'
-                  : `${formatEther(event.ticketsData?.regularTicketFee || '0')} ETN`}
+                  : userTicketType === 'VIP' && event.ticketsData?.vipTicketFee
+                  ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
+                  : userTicketType === 'REGULAR' && event.ticketsData?.regularTicketFee
+                  ? `${formatEther(event.ticketsData.regularTicketFee)} ETN`
+                  : 'N/A'}
               </span>
             </div>
 
