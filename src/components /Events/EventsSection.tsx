@@ -116,7 +116,7 @@ const EventsSection: React.FC = () => {
           .filter((event) => event !== null)
           .map(async ({ eventId, eventData }) => {
             // Check if event has ended
-            const hasEnded = Number(eventData.endDate) * 1000 < Date.now();
+            const hasEnded = Number((eventData as any).endDate) * 1000 < Date.now();
 
             // Get ticket details for events
             let regularPrice = 0;
@@ -143,29 +143,39 @@ const EventsSection: React.FC = () => {
                 regularPrice = hasRegularTicket ? Number(eventTickets[2]) / 1e18 : 0;
                 vipPrice = hasVIPTicket ? Number(eventTickets[3]) / 1e18 : 0;
               } else {
-                hasRegularTicket = eventTickets.hasRegularTicket;
-                hasVIPTicket = eventTickets.hasVIPTicket;
-                regularPrice = hasRegularTicket ? Number(eventTickets.regularTicketFee) / 1e18 : 0;
-                vipPrice = hasVIPTicket ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
+                const tickets = eventTickets as {
+                  hasRegularTicket: boolean;
+                  hasVIPTicket: boolean;
+                  regularTicketFee: string;
+                  vipTicketFee: string;
+                };
+                hasRegularTicket = tickets.hasRegularTicket;
+                hasVIPTicket = (eventTickets as { hasVIPTicket: boolean }).hasVIPTicket;
+                regularPrice = hasRegularTicket
+                  ? Number((eventTickets as { regularTicketFee: string }).regularTicketFee) / 1e18
+                  : 0;
+                vipPrice = hasVIPTicket
+                  ? Number((eventTickets as { vipTicketFee: string }).vipTicketFee) / 1e18
+                  : 0;
               }
 
               // Check if any ticket type is available
               hasTicketCreated =
-                hasRegularTicket || hasVIPTicket || Number(eventData.ticketType) === 0; // Free events are always considered to have tickets
+                hasRegularTicket || hasVIPTicket || Number((eventData as any).ticketType) === 0; // Free events are always considered to have tickets
 
               // For free events, ensure they're marked as having tickets if NFT address exists
               if (
-                Number(eventData.ticketType) === 0 &&
-                eventData.ticketNFTAddr &&
-                eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+                Number((eventData as any).ticketType) === 0 &&
+                (eventData as any).ticketNFTAddr &&
+                (eventData as any).ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
               ) {
                 hasTicketCreated = true;
               }
             } catch (error) {
               console.error(`Error fetching ticket details for event ${eventId}:`, error);
               // For backwards compatibility, check if ticketFee is set
-              if (eventData.ticketFee) {
-                regularPrice = Number(eventData.ticketFee) / 1e18 || 0;
+              if ((eventData as any).ticketFee) {
+                regularPrice = Number((eventData as any).ticketFee) / 1e18 || 0;
                 vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
                 hasRegularTicket = regularPrice > 0;
                 hasVIPTicket = false;
@@ -174,30 +184,31 @@ const EventsSection: React.FC = () => {
             }
 
             // Validate and process the image URL
-            let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
+            let imageUrl = (eventData as any).imageUri || '/placeholder-event.jpg';
 
             // Get remaining tickets
             const remainingTickets =
-              Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
+              Number((eventData as any).expectedAttendees) -
+              Number((eventData as any).userRegCount);
 
             return {
               id: eventId.toString(),
               type: getTicketType(eventData),
-              title: eventData.title || 'Untitled Event',
-              description: eventData.desc || 'No description available',
-              location: eventData.location || 'TBD',
-              date: formatDate(eventData.startDate),
-              endDate: formatDate(eventData.endDate),
+              title: (eventData as any).title || 'Untitled Event',
+              description: (eventData as any).desc || 'No description available',
+              location: (eventData as any).location || 'TBD',
+              date: formatDate((eventData as any).startDate),
+              endDate: formatDate((eventData as any).endDate),
               price: {
                 regular: regularPrice,
                 vip: vipPrice,
               },
               image: imageUrl,
-              organiser: eventData.organiser,
+              organiser: (eventData as any).organiser,
               attendees: {
-                registered: Number(eventData.userRegCount),
-                expected: Number(eventData.expectedAttendees),
-                verified: Number(eventData.verifiedAttendeesCount),
+                registered: Number((eventData as any).userRegCount),
+                expected: Number((eventData as any).expectedAttendees),
+                verified: Number((eventData as any).verifiedAttendeesCount),
               },
               remainingTickets: remainingTickets,
               hasEnded: hasEnded,
@@ -349,7 +360,7 @@ const EventsSection: React.FC = () => {
           {filters.map((filter) => (
             <button
               key={filter}
-              onClick={() => setActiveFilter(filter)}
+              onClick={() => setActiveFilter(filter as EventFilter)}
               className={`px-4 py-2 rounded-2xl font-inter border border-[#3A3A3A] text-sm
                 ${
                   activeFilter === filter
