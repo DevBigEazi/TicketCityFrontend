@@ -26,23 +26,23 @@ const EventsSection: React.FC = () => {
   // Helper function to format Unix timestamp to readable date
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'TBD';
-    
+
     const eventDate = new Date(Number(timestamp) * 1000);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     // Reset hours to compare just the dates
     const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
     const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const tomorrowDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-    
+
     // Format the time portion
     const timeString = eventDate.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
     });
-    
+
     // Check if event is today or tomorrow
     if (eventDay.getTime() === todayDay.getTime()) {
       return `Today | ${timeString}`;
@@ -350,10 +350,10 @@ const EventsSection: React.FC = () => {
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
-              className={`px-4 py-2 rounded-full font-inter text-sm
+              className={`px-4 py-2 rounded-2xl font-inter border border-[#3A3A3A] text-sm
                 ${
                   activeFilter === filter
-                    ? 'bg-searchBg shadow-button-inset text-white'
+                    ? 'bg-[#ff8a00]  text-white'
                     : 'text-textGray hover:text-white'
                 }`}
             >

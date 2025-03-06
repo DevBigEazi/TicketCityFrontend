@@ -9,6 +9,8 @@ interface EventCardProps {
   hasTicket?: boolean;
   ticketType?: string;
   isDashboard?: boolean; // Flag to determine if we're in dashboard or listing view
+  isVerified?: boolean; // Flag to determine if the ticket is verified
+
   onCheckIn?: (eventId: string) => void; // Optional check-in callback
 }
 
@@ -16,7 +18,7 @@ const EventCard: React.FC<EventCardProps> = ({
   event,
   viewMode = 'grid',
   hasTicket = false,
-  ticketType = 'Unknown',
+  //ticketType = 'Unknown',
   isDashboard = false,
   onCheckIn,
 }) => {
@@ -34,7 +36,6 @@ const EventCard: React.FC<EventCardProps> = ({
   const {
     id = '',
     title = 'Untitled Event',
-    description = 'No description available',
     location = 'TBD',
     date = 'TBD',
     price = { regular: 0, vip: 0 },
@@ -63,7 +64,7 @@ const EventCard: React.FC<EventCardProps> = ({
   const vipPrice = typeof price?.vip === 'number' ? price.vip : 0;
 
   // Handle image loading errors
-  const handleImageError = (e) => {
+  const handleImageError = (e: any) => {
     e.target.src = '/placeholder-event.jpg';
   };
 
@@ -73,9 +74,9 @@ const EventCard: React.FC<EventCardProps> = ({
   const getTypeColor = () => {
     switch (type) {
       case 'Free':
-        return 'bg-green-100 text-green-800';
+        return 'text-green-800';
       case 'Paid':
-        return 'bg-blue-100 text-blue-800';
+        return 'text-blue-800';
       case 'VIP':
         return 'bg-purple-100 text-purple-800';
       case 'Regular':
@@ -160,7 +161,7 @@ const EventCard: React.FC<EventCardProps> = ({
   );
 
   // Handle check-in button click
-  const handleCheckInClick = (e) => {
+  const handleCheckInClick = (e: any) => {
     e.stopPropagation(); // Prevent card click
     if (onCheckIn) {
       onCheckIn(id);
@@ -203,7 +204,9 @@ const EventCard: React.FC<EventCardProps> = ({
           />
 
           {/* Type badge */}
-          <div className={`absolute top-4 left-4 rounded-full px-3 py-1 ${getTypeColor()}`}>
+          <div
+            className={`absolute top-4 left-4 rounded-xl px-3 py-1 bg-[#FFF8F8] ${getTypeColor()}`}
+          >
             <span className="text-sm font-inter font-medium">{type}</span>
           </div>
         </div>
@@ -239,8 +242,8 @@ const EventCard: React.FC<EventCardProps> = ({
             <button
               className={`${
                 isGrid
-                  ? 'w-full bg-primary rounded-lg px-4 py-2 text-white font-inter text-sm'
-                  : 'bg-primary rounded-lg px-4 py-2 text-white font-inter text-sm'
+                  ? 'w-full bg-primary rounded-3xl px-4 py-2 text-white font-inter font-normal text-sm'
+                  : 'bg-primary rounded-xl px-4 py-2 text-white font-normal font-inter text-sm'
               }`}
             >
               View Details
@@ -338,8 +341,8 @@ const EventCard: React.FC<EventCardProps> = ({
                     isVerified
                       ? 'bg-green-500 bg-opacity-20 text-green-500 cursor-not-allowed'
                       : event.hasNotStarted
-                      ? 'bg-gray-500 bg-opacity-20 text-gray-400 cursor-not-allowed'
-                      : 'bg-primary hover:bg-primary/90 text-white'
+                        ? 'bg-gray-500 bg-opacity-20 text-gray-400 cursor-not-allowed'
+                        : 'bg-primary hover:bg-primary/90 text-white'
                   }
                 `}
               >
