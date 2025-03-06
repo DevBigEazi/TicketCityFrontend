@@ -89,7 +89,7 @@ const EventCard: React.FC<EventCardProps> = ({
     }
   };
 
-  // Show the right badge based on ticket type and verification status
+  // Show the right badge based on verification status only (ticket label removed)
   const getTicketBadge = () => {
     if (!hasTicket || !isDashboard) {
       return null;
@@ -107,7 +107,6 @@ const EventCard: React.FC<EventCardProps> = ({
     return (
       <div className="absolute top-4 right-4 bg-[#FF8A00] text-white px-2 py-1 rounded-md text-xs font-medium flex items-center">
         <Ticket className="w-3 h-3 mr-1" />
-        {ticketType} Ticket
       </div>
     );
   };
@@ -141,7 +140,21 @@ const EventCard: React.FC<EventCardProps> = ({
           boxShadow: '0 0 5px #FFF',
           animation: 'pulse 1.5s infinite',
         }}
-      ></div>
+      >
+        <style>{`
+    @keyframes pulse {
+      0% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.2;
+      }
+      100% {
+        opacity: 1;
+      }
+    }
+  `}</style>
+      </div>
       LIVE
     </div>
   );
