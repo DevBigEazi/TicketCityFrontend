@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface EventFormData {
   title: string;
@@ -9,20 +9,20 @@ interface EventFormData {
   description: string;
   capacity: number;
   image: File | null;
-  eventType: "FREE" | "PAID";
-  ticketType: "NONE" | "REGULAR" | "VIP";
+  eventType: 'FREE' | 'PAID';
+  ticketType: 'NONE' | 'REGULAR' | 'VIP';
 }
 
 const initialFormState: EventFormData = {
-  title: "",
-  startDateTime: "",
-  endDateTime: "",
-  location: "",
-  description: "",
+  title: '',
+  startDateTime: '',
+  endDateTime: '',
+  location: '',
+  description: '',
   capacity: 0,
   image: null,
-  eventType: "FREE",
-  ticketType: "NONE",
+  eventType: 'FREE',
+  ticketType: 'NONE',
 };
 
 const CreateEventFormComponent = () => {
@@ -30,58 +30,52 @@ const CreateEventFormComponent = () => {
   const location = useLocation();
   const existingData = location.state as EventFormData | null;
 
-  const [formData, setFormData] = useState<EventFormData>(
-    existingData || { ...initialFormState }
-  );
+  const [formData, setFormData] = useState<EventFormData>(existingData || { ...initialFormState });
 
   // Reset form when navigating back from successful event creation
   useEffect(() => {
     // Check if we're coming back to the form without any state
     // This indicates we need to reset the form (e.g., after successful creation)
-    if (location.state === null && location.key !== "default") {
+    if (location.state === null && location.key !== 'default') {
       setFormData({ ...initialFormState });
     }
   }, [location]);
 
   const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value, files } = e.target as HTMLInputElement;
 
     setFormData((prev) => ({
       ...prev,
       [name]:
-        name === "image"
+        name === 'image'
           ? files && files.length > 0
             ? files[0]
             : null
-          : name === "capacity"
-          ? Number(value)
-          : value,
+          : name === 'capacity'
+            ? Number(value)
+            : value,
     }));
 
     // Auto-set ticketType based on eventType
-    if (name === "eventType") {
+    if (name === 'eventType') {
       setFormData((prev) => ({
         ...prev,
-        ticketType: value === "PAID" ? "REGULAR" : "NONE",
+        ticketType: value === 'PAID' ? 'REGULAR' : 'NONE',
       }));
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/event-preview", { state: formData });
+    navigate('/event-preview', { state: formData });
   };
 
   return (
     <div className="min-h-screen bg-background p-8">
-      <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
-        <h1 className="text-white text-2xl font-bold mb-8 text-center">
-          Create New Event
-        </h1>
+      <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-button-inset p-8">
+        <h1 className="text-white text-2xl font-bold mb-8 text-center">Create New Event</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
           <input
             type="text"
@@ -89,7 +83,7 @@ const CreateEventFormComponent = () => {
             value={formData.title}
             onChange={handleChange}
             required
-            className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
+            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             placeholder="Event Title"
           />
 
@@ -101,7 +95,7 @@ const CreateEventFormComponent = () => {
               value={formData.startDateTime}
               onChange={handleChange}
               required
-              className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             />
           </div>
 
@@ -113,7 +107,7 @@ const CreateEventFormComponent = () => {
               value={formData.endDateTime}
               onChange={handleChange}
               required
-              className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             />
           </div>
 
@@ -123,7 +117,7 @@ const CreateEventFormComponent = () => {
             value={formData.location}
             onChange={handleChange}
             required
-            className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
+            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             placeholder="Location"
           />
 
@@ -132,7 +126,7 @@ const CreateEventFormComponent = () => {
             value={formData.description}
             onChange={handleChange}
             required
-            className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white min-h-[100px]"
+            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white min-h-[100px]"
             placeholder="Description"
           />
 
@@ -141,13 +135,11 @@ const CreateEventFormComponent = () => {
             name="image"
             onChange={handleChange}
             accept="image/*"
-            className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
+            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             required={!formData.image}
           />
           {formData.image && (
-            <p className="text-white text-sm">
-              Image selected: {formData.image.name}
-            </p>
+            <p className="text-white text-sm">Image selected: {formData.image.name}</p>
           )}
 
           <input
@@ -157,7 +149,7 @@ const CreateEventFormComponent = () => {
             onChange={handleChange}
             required
             min="1"
-            className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
+            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             placeholder="Capacity"
           />
 
@@ -167,7 +159,8 @@ const CreateEventFormComponent = () => {
               name="eventType"
               value={formData.eventType}
               onChange={handleChange}
-              className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white">
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+            >
               <option value="FREE">FREE</option>
               <option value="PAID">PAID</option>
             </select>
@@ -175,7 +168,8 @@ const CreateEventFormComponent = () => {
 
           <button
             type="submit"
-            className="w-full bg-primary text-white py-4 rounded-lg font-semibold text-lg hover:opacity-90 transition-opacity">
+            className="w-full bg-primary text-white py-4 rounded-lg font-semibold text-lg hover:opacity-90 transition-opacity"
+          >
             Continue
           </button>
         </form>

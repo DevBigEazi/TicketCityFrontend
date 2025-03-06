@@ -291,14 +291,23 @@ const EventCard: React.FC<EventCardProps> = ({
         <h3 className="text-lg font-semibold text-white mb-2 line-clamp-1">{title}</h3>
 
         <div className="space-y-2 mb-2">
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-primary" />
             <span className="text-sm text-textGray truncate">{date}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-primary" />
-            <span className="text-sm text-textGray truncate">{location}</span>
-          </div>
+          {viewMode !== 'grid' ? (
+            <div className="flex items-center bg-black gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              dvevrvrvrv dwvrvr
+              <MapPin className="w-4 h-4 text-primary" />
+              <span className="text-sm text-textGray truncate">{location}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary" />
+              <span className="text-sm text-textGray truncate">{location}</span>
+            </div>
+          )} */}
         </div>
 
         {/* Dashboard-specific UI */}
