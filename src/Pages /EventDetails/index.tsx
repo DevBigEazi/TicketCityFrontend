@@ -232,108 +232,6 @@ const EventDetails = () => {
     }
   };
 
-  const getUserTicketCategory = async (eventId, userAddress) => {
-    if (!eventId || !userAddress) return null;
-
-    try {
-      // First check if the user has a VIP ticket
-      const tickets = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'eventTickets',
-        args: [eventId],
-      });
-
-      let ticketType = null;
-
-      // If user has a VIP ticket
-      if (tickets[1] && tickets[4]) {
-        // hasVIPTicket and ticketNFT exists
-        try {
-          const vipBalance = await publicClient.readContract({
-            address: tickets[4], // VIP ticket NFT address
-            abi: [
-              {
-                inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-                name: 'balanceOf',
-                outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function',
-              },
-            ],
-            functionName: 'balanceOf',
-            args: [userAddress],
-          });
-
-          if (vipBalance > 0) {
-            return 'VIP';
-          }
-        } catch (error) {
-          console.error('Error checking VIP ticket balance:', error);
-        }
-      }
-
-      // If user has a REGULAR ticket
-      if (tickets[0] && tickets[3]) {
-        // hasRegularTicket and ticketNFT exists
-        try {
-          const regularBalance = await publicClient.readContract({
-            address: tickets[3], // Regular ticket NFT address
-            functionName: 'balanceOf',
-            abi: [
-              {
-                inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-                name: 'balanceOf',
-                outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function',
-              },
-            ],
-            args: [userAddress],
-          });
-
-          if (regularBalance > 0) {
-            return 'REGULAR';
-          }
-        } catch (error) {
-          console.error('Error checking REGULAR ticket balance:', error);
-        }
-      }
-
-      // Get event details to check if it's a FREE event
-      const eventData = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'getEvent',
-        args: [eventId],
-      });
-
-      // If it's a FREE event
-      if (Number(eventData.ticketType) === 0) {
-        // FREE ticket type
-        return 'FREE';
-      }
-
-      // If we still don't know the type but user has registered
-      const hasRegistered = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'hasRegistered',
-        args: [userAddress, eventId],
-      });
-
-      if (hasRegistered) {
-        // The user has a ticket, but we couldn't determine the type
-        return 'UNKNOWN';
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error getting user ticket category:', error);
-      return null;
-    }
-  };
-
   // Use this effect for the initial load
   useEffect(() => {
     // Always fetch event details first with loading state shown
@@ -428,9 +326,6 @@ const EventDetails = () => {
           account: wallets[0].address,
         });
 
-        // Set transaction hash in state
-        setTransactionHash(hash);
-
         // Store transaction hash in localStorage as immediate solution
         localStorage.setItem(`event_${event.id}_user_${wallets[0].address}_ticket_tx`, hash);
 
@@ -480,6 +375,9 @@ const EventDetails = () => {
 
         if (receipt.status === 'success') {
           alert('Ticket purchased successfully!');
+
+          // Set transaction receipt in state
+          setTransactionHash(hash);
           // Refresh event details
           await loadEventDetails();
           // Update balance
@@ -949,7 +847,7 @@ const EventDetails = () => {
               <p className="mb-1 font-semibold">Transaction Details:</p>
               <p className="break-all text-xs">Hash: {transactionHash}</p>
               <a
-                href={`https://sepolia.basescan.org/tx/${transactionHash}`}
+                href={`https://testnet-blockexplorer.electroneum.com/tx/${transactionHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-yellow-300 hover:text-yellow-400 text-xs inline-block mt-1"
