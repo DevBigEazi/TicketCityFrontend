@@ -1,7 +1,7 @@
 import React from 'react';
 import { Calendar, MapPin, Ticket, Users, CheckCircle, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Event } from '../../types';
+import { Edvent } from '../../types';
 
 interface EventCardProps {
   event: Event;

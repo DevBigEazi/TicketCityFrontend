@@ -74,6 +74,7 @@ export interface Event {
   };
   remainingTickets: number;
   hasEnded: boolean;
+  isVerified: boolean;
   hasTicketCreated: boolean;
   hasRegularTicket: boolean;
   hasVIPTicket: boolean;
