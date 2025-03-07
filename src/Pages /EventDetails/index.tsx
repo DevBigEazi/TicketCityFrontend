@@ -1,5 +1,5 @@
 import React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { usePrivy, useUser, useWallets } from '@privy-io/react-auth';
@@ -14,17 +14,14 @@ import TicketCreationSection from '../../components /Events/TicketCreationSectio
 import EventDetailsFooter from '../../components /Events/EventDetailsFooter';
 import { pinata } from '../../utils/pinata';
 
-// Enums for ticket types to match the contract
-const EventType = {
-  FREE: 0,
-  PAID: 1,
-};
-
-const PaidTicketCategory = {
-  NONE: 0,
-  REGULAR: 1,
-  VIP: 2,
-};
+import {
+  EventData,
+  EventTicketsData,
+  EventType,
+  PaidTicketCategory,
+  ErrorStateProps,
+  NoEventStateProps,
+} from '../../types';
 
 // Loading state component
 const LoadingState = () => (
@@ -39,7 +36,7 @@ const LoadingState = () => (
 );
 
 // Error state component
-const ErrorState = ({ error, navigate }) => (
+const ErrorState: React.FC<ErrorStateProps> = ({ error, navigate }) => (
   <div className="min-h-screen bg-background p-8">
     <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
       <h1 className="text-white text-2xl font-bold mb-4 text-center">Error</h1>
@@ -55,7 +52,7 @@ const ErrorState = ({ error, navigate }) => (
 );
 
 // No event state component
-const NoEventState = ({ navigate }) => (
+const NoEventState: React.FC<NoEventStateProps> = ({ navigate }) => (
   <div className="min-h-screen bg-background p-8">
     <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
       <h1 className="text-white text-2xl font-bold mb-4 text-center">Event Not Found</h1>
@@ -72,40 +69,42 @@ const NoEventState = ({ navigate }) => (
   </div>
 );
 
-const EventDetails = () => {
+const EventDetails: React.FC = () => {
   const navigate = useNavigate();
-  const { eventId } = useParams();
+  const { eventId } = useParams<{ eventId: string }>();
   const { login, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { refreshUser } = useUser();
-  const [balance, setBalance] = useState('Loading...');
+  const [balance, setBalance] = useState<string>('Loading...');
 
   // Local state for event data
-  const [event, setEvent] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [isOrganizer, setIsOrganizer] = useState(false);
-  const [hasTicket, setHasTicket] = useState(false);
-  const [ticketCreated, setTicketCreated] = useState(false);
+  const [event, setEvent] = useState<EventData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isOrganizer, setIsOrganizer] = useState<boolean>(false);
+  const [hasTicket, setHasTicket] = useState<boolean>(false);
+  const [ticketCreated, setTicketCreated] = useState<boolean>(false);
 
-  const [attendanceRate, setAttendanceRate] = useState('Loading...');
-  const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
-  const [purchaseError, setPurchaseError] = useState(null);
-  const [isPurchasing, setIsPurchasing] = useState(false);
-  const [transactionHash, setTransactionHash] = useState('');
+  const [attendanceRate, setAttendanceRate] = useState<string>('Loading...');
+  const [selectedTicketType, setSelectedTicketType] = useState<string>('REGULAR');
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState<boolean>(false);
+  const [transactionHash, setTransactionHash] = useState<string>('');
 
   // Add new state for tracking last update time
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  console.log(lastUpdated);
 
   const publicClient = createPublicClientInstance();
 
-  // Fetch ETN balance
   const getETNBalance = async () => {
     if (!wallets || !wallets[0]?.address) return;
 
     try {
+      const walletAddress = wallets[0].address as `0x${string}`; // Explicitly cast to required format
+
       const balanceWei = await publicClient.getBalance({
-        address: wallets[0].address,
+        address: walletAddress,
       });
 
       const formattedBalance = formatEther(balanceWei);
@@ -135,34 +134,47 @@ const EventDetails = () => {
       const eventIdNumber = parseInt(eventId);
 
       // Get event data from contract directly
-      const eventData = await publicClient.readContract({
+      const eventData = (await publicClient.readContract({
         address: TICKET_CITY_ADDR,
         abi: TICKET_CITY_ABI,
         functionName: 'getEvent',
         args: [eventIdNumber],
-      });
+      })) as any; // Using any temporarily but will format correctly
 
       // Get ticket information
-      const eventTicketsData = await publicClient.readContract({
+      const eventTicketsData = (await publicClient.readContract({
         address: TICKET_CITY_ADDR,
         abi: TICKET_CITY_ABI,
         functionName: 'eventTickets',
         args: [eventIdNumber],
-      });
+      })) as any; // Using any temporarily but will format correctly
 
       // Format the ticket data properly
-      const formattedTicketsData = {
+      const formattedTicketsData: EventTicketsData = {
         hasRegularTicket: eventTicketsData[0],
         hasVIPTicket: eventTicketsData[1],
         regularTicketFee: eventTicketsData[2],
         vipTicketFee: eventTicketsData[3],
         ticketURI: eventTicketsData[4],
+        regularTicketNFT: eventTicketsData[3],
+        vipTicketNFT: eventTicketsData[4],
       };
 
       // Set event data
-      const formattedEvent = {
-        ...eventData,
+      const formattedEvent: EventData = {
         id: eventIdNumber,
+        title: eventData[0] || '',
+        desc: eventData[1] || '',
+        organiser: eventData[2] as `0x${string}`,
+        location: eventData[3] || '',
+        startDate: eventData[4],
+        endDate: eventData[5],
+        ticketType: Number(eventData[6]),
+        ticketNFTAddr: eventData[7] as `0x${string}`,
+        userRegCount: Number(eventData[8]),
+        verifiedAttendeesCount: Number(eventData[9]),
+        expectedAttendees: Number(eventData[10]),
+        imageUri: eventData[11] || '',
         ticketsData: formattedTicketsData,
       };
 
@@ -170,23 +182,25 @@ const EventDetails = () => {
 
       // Check if tickets have been created
       const hasTicketCreated =
-        (Number(eventData.ticketType) === EventType.FREE ||
-          Number(eventData.ticketType) === EventType.PAID) &&
+        (Number(formattedEvent.ticketType) === EventType.FREE ||
+          Number(formattedEvent.ticketType) === EventType.PAID) &&
         (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
-        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
+        formattedEvent.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
 
       setTicketCreated(hasTicketCreated);
 
       // Set appropriate initial ticket type based on what's available
       // Determine if tickets have been created - different logic for FREE vs PAID events
-      if (Number(eventData.ticketType) === EventType.FREE) {
+      if (Number(formattedEvent.ticketType) === EventType.FREE) {
         // For FREE events, we only need the NFT contract address to be set
-        setTicketCreated(eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000');
-      } else if (Number(eventData.ticketType) === EventType.PAID) {
+        setTicketCreated(
+          formattedEvent.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
+        );
+      } else if (Number(formattedEvent.ticketType) === EventType.PAID) {
         // For PAID events, we need ticket types and NFT contract
         setTicketCreated(
           (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
-            eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
+            formattedEvent.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
         );
       } else {
         setTicketCreated(false);
@@ -195,28 +209,30 @@ const EventDetails = () => {
       // If user is authenticated, check for user-specific information
       if (authenticated && wallets && wallets[0]?.address) {
         // Check if this user is the organizer of the event
+        const walletAddress = wallets[0].address as `0x${string}`;
         const isUserOrganizer =
-          wallets[0]?.address &&
-          eventData.organiser &&
-          eventData.organiser.toLowerCase() === wallets[0].address.toLowerCase();
+          walletAddress &&
+          formattedEvent.organiser &&
+          formattedEvent.organiser.toLowerCase() === walletAddress.toLowerCase();
 
         setIsOrganizer(isUserOrganizer);
 
         // Check if user has registered for event
-        const hasRegistered = await publicClient.readContract({
+        const hasRegistered = (await publicClient.readContract({
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'hasRegistered',
-          args: [wallets[0].address, eventIdNumber],
-        });
+          args: [walletAddress, eventIdNumber],
+        })) as boolean;
 
         setHasTicket(hasRegistered);
       }
 
       // Calculate attendance rate
-      if (eventData.userRegCount > 0) {
+      if (formattedEvent.userRegCount > 0) {
         const rate =
-          (Number(eventData.verifiedAttendeesCount) * 100) / Number(eventData.userRegCount);
+          (Number(formattedEvent.verifiedAttendeesCount) * 100) /
+          Number(formattedEvent.userRegCount);
         setAttendanceRate(`${rate.toFixed(1)}%`);
       } else {
         setAttendanceRate('0%');
@@ -224,7 +240,7 @@ const EventDetails = () => {
 
       // Update the last updated timestamp
       setLastUpdated(new Date());
-    } catch (error) {
+    } catch (error: any) {
       setError(`Failed to fetch event details: ${error.message || 'Unknown error'}`);
       setEvent(null); // Reset event state on error
     } finally {
@@ -232,107 +248,111 @@ const EventDetails = () => {
     }
   };
 
-  const getUserTicketCategory = async (eventId, userAddress) => {
-    if (!eventId || !userAddress) return null;
+  // Function to get user's ticket category
+  // const getUserTicketCategory = async (
+  //   eventId: number,
+  //   userAddress: `0x${string}`,
+  // ): Promise<string | null> => {
+  //   if (!eventId || !userAddress) return null;
 
-    try {
-      // First check if the user has a VIP ticket
-      const tickets = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'eventTickets',
-        args: [eventId],
-      });
+  //   try {
+  //     // First check if the user has a VIP ticket
+  //     const tickets = (await publicClient.readContract({
+  //       address: TICKET_CITY_ADDR,
+  //       abi: TICKET_CITY_ABI,
+  //       functionName: 'eventTickets',
+  //       args: [eventId],
+  //     })) as any[];
 
-      let ticketType = null;
+  //     let ticketType = null;
 
-      // If user has a VIP ticket
-      if (tickets[1] && tickets[4]) {
-        // hasVIPTicket and ticketNFT exists
-        try {
-          const vipBalance = await publicClient.readContract({
-            address: tickets[4], // VIP ticket NFT address
-            abi: [
-              {
-                inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-                name: 'balanceOf',
-                outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function',
-              },
-            ],
-            functionName: 'balanceOf',
-            args: [userAddress],
-          });
+  //     // If user has a VIP ticket
+  //     if (tickets[1] && tickets[4]) {
+  //       // hasVIPTicket and ticketNFT exists
+  //       try {
+  //         const vipBalance = (await publicClient.readContract({
+  //           address: tickets[4] as `0x${string}`, // VIP ticket NFT address
+  //           abi: [
+  //             {
+  //               inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+  //               name: 'balanceOf',
+  //               outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+  //               stateMutability: 'view',
+  //               type: 'function',
+  //             },
+  //           ],
+  //           functionName: 'balanceOf',
+  //           args: [userAddress],
+  //         })) as bigint;
 
-          if (vipBalance > 0) {
-            return 'VIP';
-          }
-        } catch (error) {
-          console.error('Error checking VIP ticket balance:', error);
-        }
-      }
+  //         if (vipBalance > 0n) {
+  //           return 'VIP';
+  //         }
+  //       } catch (error) {
+  //         console.error('Error checking VIP ticket balance:', error);
+  //       }
+  //     }
 
-      // If user has a REGULAR ticket
-      if (tickets[0] && tickets[3]) {
-        // hasRegularTicket and ticketNFT exists
-        try {
-          const regularBalance = await publicClient.readContract({
-            address: tickets[3], // Regular ticket NFT address
-            functionName: 'balanceOf',
-            abi: [
-              {
-                inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-                name: 'balanceOf',
-                outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function',
-              },
-            ],
-            args: [userAddress],
-          });
+  //     // If user has a REGULAR ticket
+  //     if (tickets[0] && tickets[3]) {
+  //       // hasRegularTicket and ticketNFT exists
+  //       try {
+  //         const regularBalance = (await publicClient.readContract({
+  //           address: tickets[3] as `0x${string}`, // Regular ticket NFT address
+  //           functionName: 'balanceOf',
+  //           abi: [
+  //             {
+  //               inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
+  //               name: 'balanceOf',
+  //               outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+  //               stateMutability: 'view',
+  //               type: 'function',
+  //             },
+  //           ],
+  //           args: [userAddress],
+  //         })) as bigint;
 
-          if (regularBalance > 0) {
-            return 'REGULAR';
-          }
-        } catch (error) {
-          console.error('Error checking REGULAR ticket balance:', error);
-        }
-      }
+  //         if (regularBalance > 0n) {
+  //           return 'REGULAR';
+  //         }
+  //       } catch (error) {
+  //         console.error('Error checking REGULAR ticket balance:', error);
+  //       }
+  //     }
 
-      // Get event details to check if it's a FREE event
-      const eventData = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'getEvent',
-        args: [eventId],
-      });
+  //     // Get event details to check if it's a FREE event
+  //     const eventData = (await publicClient.readContract({
+  //       address: TICKET_CITY_ADDR,
+  //       abi: TICKET_CITY_ABI,
+  //       functionName: 'getEvent',
+  //       args: [eventId],
+  //     })) as any[];
 
-      // If it's a FREE event
-      if (Number(eventData.ticketType) === 0) {
-        // FREE ticket type
-        return 'FREE';
-      }
+  //     // If it's a FREE event
+  //     if (Number(eventData[6]) === 0) {
+  //       // FREE ticket type
+  //       return 'FREE';
+  //     }
 
-      // If we still don't know the type but user has registered
-      const hasRegistered = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'hasRegistered',
-        args: [userAddress, eventId],
-      });
+  //     // If we still don't know the type but user has registered
+  //     const hasRegistered = (await publicClient.readContract({
+  //       address: TICKET_CITY_ADDR,
+  //       abi: TICKET_CITY_ABI,
+  //       functionName: 'hasRegistered',
+  //       args: [userAddress, eventId],
+  //     })) as boolean;
 
-      if (hasRegistered) {
-        // The user has a ticket, but we couldn't determine the type
-        return 'UNKNOWN';
-      }
+  //     if (hasRegistered) {
+  //       // The user has a ticket, but we couldn't determine the type
+  //       return 'UNKNOWN';
+  //     }
 
-      return null;
-    } catch (error) {
-      console.error('Error getting user ticket category:', error);
-      return null;
-    }
-  };
+  //     return null;
+  //   } catch (error) {
+  //     console.error('Error getting user ticket category:', error);
+  //     return null;
+  //   }
+  // };
 
   // Use this effect for the initial load
   useEffect(() => {
@@ -367,13 +387,13 @@ const EventDetails = () => {
   }, [authenticated, wallets]);
 
   // Format date from timestamp
-  const formatDate = (timestamp) => {
+  const formatDate = (timestamp: bigint | undefined): string => {
     if (!timestamp) return 'TBD';
     return new Date(Number(timestamp) * 1000).toDateString();
   };
 
   // Format time from timestamp
-  const formatTime = (timestamp) => {
+  const formatTime = (timestamp: bigint | undefined): string => {
     if (!timestamp) return 'TBD';
     return new Date(Number(timestamp) * 1000).toLocaleTimeString();
   };
@@ -393,8 +413,8 @@ const EventDetails = () => {
       const isFreeEvent = Number(event.ticketType) === EventType.FREE;
 
       // Determine ticket category based on event type and selection
-      let ticketCategory;
-      let ticketPrice;
+      let ticketCategory: PaidTicketCategory;
+      let ticketPrice: bigint;
 
       if (isFreeEvent) {
         // For FREE events, always use NONE (0) category
@@ -402,10 +422,10 @@ const EventDetails = () => {
         ticketPrice = 0n;
       } else {
         // For PAID events, use the selected ticket type
-        if (selectedTicketType === 'REGULAR' && event.ticketsData.hasRegularTicket) {
+        if (selectedTicketType === 'REGULAR' && event.ticketsData?.hasRegularTicket) {
           ticketCategory = PaidTicketCategory.REGULAR;
           ticketPrice = event.ticketsData.regularTicketFee;
-        } else if (selectedTicketType === 'VIP' && event.ticketsData.hasVIPTicket) {
+        } else if (selectedTicketType === 'VIP' && event.ticketsData?.hasVIPTicket) {
           ticketCategory = PaidTicketCategory.VIP;
           ticketPrice = event.ticketsData.vipTicketFee;
         } else {
@@ -416,6 +436,7 @@ const EventDetails = () => {
       // Get wallet client
       const provider = await wallets[0].getEthereumProvider();
       const walletClient = createWalletClientInstance(provider);
+      const walletAddress = wallets[0].address as `0x${string}`;
 
       try {
         // Purchase the ticket
@@ -425,21 +446,21 @@ const EventDetails = () => {
           functionName: 'purchaseTicket',
           args: [event.id, ticketCategory],
           value: ticketPrice,
-          account: wallets[0].address,
+          account: walletAddress,
         });
 
         // Set transaction hash in state
         setTransactionHash(hash);
 
         // Store transaction hash in localStorage as immediate solution
-        localStorage.setItem(`event_${event.id}_user_${wallets[0].address}_ticket_tx`, hash);
+        localStorage.setItem(`event_${event.id}_user_${walletAddress}_ticket_tx`, hash);
 
         // Create ticket metadata for Pinata
         const ticketMetadata = {
           eventId: event.id,
           eventTitle: event.title,
           purchaseDate: new Date().toISOString(),
-          userAddress: wallets[0].address,
+          userAddress: walletAddress,
           ticketType: selectedTicketType,
           ticketCategory: ticketCategory,
           ticketPrice: ticketPrice.toString(),
@@ -453,7 +474,7 @@ const EventDetails = () => {
 
         const metadataFile = new File(
           [metadataBlob],
-          `event-${event.id}-user-${wallets[0].address.slice(0, 6)}-ticket.json`,
+          `event-${event.id}-user-${walletAddress.slice(0, 6)}-ticket.json`,
         );
 
         // Upload metadata to Pinata (non-blocking)
@@ -465,7 +486,7 @@ const EventDetails = () => {
 
             // Store the IPFS hash for future retrieval
             localStorage.setItem(
-              `event_${event.id}_user_${wallets[0].address}_ticket_metadata`,
+              `event_${event.id}_user_${walletAddress}_ticket_metadata`,
               ipfsHash,
             );
           })
@@ -487,19 +508,19 @@ const EventDetails = () => {
         } else {
           throw new Error('Transaction failed');
         }
-      } catch (txError) {
+      } catch (txError: any) {
         // Check if user rejected the transaction in their wallet
         if (
-          txError.message.includes('rejected') ||
-          txError.message.includes('denied') ||
-          txError.message.includes('cancelled')
+          txError.message?.includes('rejected') ||
+          txError.message?.includes('denied') ||
+          txError.message?.includes('cancelled')
         ) {
           throw new Error('Transaction was rejected in wallet');
         } else {
           throw txError; // rethrow other errors
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       setPurchaseError(`Failed to purchase ticket: ${error.message || 'Unknown error'}`);
     } finally {
       // Ensure the purchasing state is reset even if there's an error
@@ -511,10 +532,10 @@ const EventDetails = () => {
     if (!event || !wallets || !wallets[0]?.address) return;
 
     try {
+      const walletAddress = wallets[0].address as `0x${string}`;
+
       // First check localStorage for the transaction hash (fastest method)
-      const storedHash = localStorage.getItem(
-        `event_${event.id}_user_${wallets[0].address}_ticket_tx`,
-      );
+      const storedHash = localStorage.getItem(`event_${event.id}_user_${walletAddress}_ticket_tx`);
 
       if (storedHash) {
         setTransactionHash(storedHash);
@@ -523,7 +544,7 @@ const EventDetails = () => {
 
       // If no direct hash, try to get from IPFS via stored metadata hash
       const metadataHash = localStorage.getItem(
-        `event_${event.id}_user_${wallets[0].address}_ticket_metadata`,
+        `event_${event.id}_user_${walletAddress}_ticket_metadata`,
       );
 
       if (metadataHash) {
@@ -541,7 +562,7 @@ const EventDetails = () => {
 
               // Save back to localStorage for future faster retrieval
               localStorage.setItem(
-                `event_${event.id}_user_${wallets[0].address}_ticket_tx`,
+                `event_${event.id}_user_${walletAddress}_ticket_tx`,
                 metadata.transactionHash,
               );
             }
@@ -576,7 +597,8 @@ const EventDetails = () => {
     return <NoEventState navigate={navigate} />;
   }
 
-  const TicketTypeSelector = () => {
+  // TicketTypeSelector Component
+  const TicketTypeSelector: React.FC = () => {
     // Determine what options should be available
     const isPaidEvent = event && Number(event.ticketType) === EventType.PAID;
     const hasRegularOption = isPaidEvent && event.ticketsData?.hasRegularTicket;
@@ -619,11 +641,13 @@ const EventDetails = () => {
             <>
               {hasRegularOption && (
                 <option value="REGULAR">
-                  REGULAR - {formatEther(event.ticketsData.regularTicketFee)} ETN
+                  REGULAR - {formatEther(event.ticketsData?.regularTicketFee || 0n)} ETN
                 </option>
               )}
               {hasVipOption && (
-                <option value="VIP">VIP - {formatEther(event.ticketsData.vipTicketFee)} ETN</option>
+                <option value="VIP">
+                  VIP - {formatEther(event.ticketsData?.vipTicketFee || 0n)} ETN
+                </option>
               )}
               {!hasRegularOption && !hasVipOption && (
                 <option value="NONE">No tickets available</option>
@@ -639,7 +663,7 @@ const EventDetails = () => {
   };
 
   // Wallet info component
-  const WalletInfo = () => (
+  const WalletInfo: React.FC = () => (
     <div className="space-y-2">
       <p className="font-inter text-medium text-white">
         Wallet:{' '}
@@ -654,11 +678,10 @@ const EventDetails = () => {
   );
 
   // The TicketOwnedSection component to display the transaction hash
-  // The TicketOwnedSection component to display the transaction hash
-  const TicketOwnedSection = () => {
-    const ticketRef = React.useRef(null);
-    const [userTicketType, setUserTicketType] = useState('');
-    const [isLoadingTicketType, setIsLoadingTicketType] = useState(true);
+  const TicketOwnedSection: React.FC = () => {
+    const ticketRef = useRef<HTMLDivElement>(null);
+    const [userTicketType, setUserTicketType] = useState<string>('');
+    const [isLoadingTicketType, setIsLoadingTicketType] = useState<boolean>(true);
 
     // Fetch the user's actual ticket type when component mounts
     useEffect(() => {
@@ -667,13 +690,15 @@ const EventDetails = () => {
 
         setIsLoadingTicketType(true);
         try {
+          const walletAddress = wallets[0].address as `0x${string}`;
+
           // Get event tickets data
-          const eventTicketsData = await publicClient.readContract({
+          const eventTicketsData = (await publicClient.readContract({
             address: TICKET_CITY_ADDR,
             abi: TICKET_CITY_ABI,
             functionName: 'eventTickets',
             args: [event.id],
-          });
+          })) as any[];
 
           // Format ticket data
           const ticketsData = {
@@ -681,17 +706,17 @@ const EventDetails = () => {
             hasVIPTicket: eventTicketsData[1],
             regularTicketFee: eventTicketsData[2],
             vipTicketFee: eventTicketsData[3],
-            regularTicketNFT: eventTicketsData[3], // Regular ticket NFT address
-            vipTicketNFT: eventTicketsData[4], // VIP ticket NFT address
+            regularTicketNFT: eventTicketsData[3] as `0x${string}`, // Regular ticket NFT address
+            vipTicketNFT: eventTicketsData[4] as `0x${string}`, // VIP ticket NFT address
           };
 
           // Check if user has registered for the event
-          const hasRegistered = await publicClient.readContract({
+          const hasRegistered = (await publicClient.readContract({
             address: TICKET_CITY_ADDR,
             abi: TICKET_CITY_ABI,
             functionName: 'hasRegistered',
-            args: [wallets[0].address, event.id],
-          });
+            args: [walletAddress, event.id],
+          })) as boolean;
 
           if (!hasRegistered) {
             setUserTicketType('Not Registered');
@@ -707,7 +732,7 @@ const EventDetails = () => {
           // For PAID events - Check VIP first
           if (ticketsData.hasVIPTicket && ticketsData.vipTicketNFT) {
             try {
-              const vipBalance = await publicClient.readContract({
+              const vipBalance = (await publicClient.readContract({
                 address: ticketsData.vipTicketNFT,
                 abi: [
                   {
@@ -719,10 +744,10 @@ const EventDetails = () => {
                   },
                 ],
                 functionName: 'balanceOf',
-                args: [wallets[0].address],
-              });
+                args: [walletAddress],
+              })) as bigint;
 
-              if (vipBalance > 0) {
+              if (vipBalance > 0n) {
                 setUserTicketType('VIP');
                 return;
               }
@@ -734,7 +759,7 @@ const EventDetails = () => {
           // Then check REGULAR
           if (ticketsData.hasRegularTicket && ticketsData.regularTicketNFT) {
             try {
-              const regularBalance = await publicClient.readContract({
+              const regularBalance = (await publicClient.readContract({
                 address: ticketsData.regularTicketNFT,
                 abi: [
                   {
@@ -746,10 +771,10 @@ const EventDetails = () => {
                   },
                 ],
                 functionName: 'balanceOf',
-                args: [wallets[0].address],
-              });
+                args: [walletAddress],
+              })) as bigint;
 
-              if (regularBalance > 0) {
+              if (regularBalance > 0n) {
                 setUserTicketType('REGULAR');
                 return;
               }
@@ -763,15 +788,24 @@ const EventDetails = () => {
         } catch (error) {
           console.error('Error fetching user ticket type:', error);
           // If user is registered but we can't determine type, default to REGULAR
-          if (
-            await publicClient.readContract({
-              address: TICKET_CITY_ADDR,
-              abi: TICKET_CITY_ABI,
-              functionName: 'hasRegistered',
-              args: [wallets[0].address, event.id],
-            })
-          ) {
-            setUserTicketType('REGULAR');
+          if (wallets && wallets[0]?.address) {
+            const walletAddress = wallets[0].address as `0x${string}`;
+            try {
+              const hasRegistered = (await publicClient.readContract({
+                address: TICKET_CITY_ADDR,
+                abi: TICKET_CITY_ABI,
+                functionName: 'hasRegistered',
+                args: [walletAddress, event.id],
+              })) as boolean;
+
+              if (hasRegistered) {
+                setUserTicketType('REGULAR');
+              } else {
+                setUserTicketType('UNKNOWN');
+              }
+            } catch {
+              setUserTicketType('UNKNOWN');
+            }
           } else {
             setUserTicketType('UNKNOWN');
           }
@@ -793,11 +827,11 @@ const EventDetails = () => {
         // Add a small delay to ensure the component is fully rendered
         setTimeout(() => {
           htmlToImage
-            .toPng(ticketRef.current, {
+            .toPng(ticketRef.current!, {
               quality: 2.0,
               backgroundColor: '#0F0B18',
-              width: ticketRef.current.offsetWidth,
-              height: ticketRef.current.offsetHeight,
+              width: ticketRef.current!.offsetWidth,
+              height: ticketRef.current!.offsetHeight,
               cacheBust: true,
               // Improve image quality
               pixelRatio: 2,
@@ -867,10 +901,10 @@ const EventDetails = () => {
                 {event.ticketType === EventType.FREE
                   ? 'FREE'
                   : userTicketType === 'VIP' && event.ticketsData?.vipTicketFee
-                  ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
-                  : userTicketType === 'REGULAR' && event.ticketsData?.regularTicketFee
-                  ? `${formatEther(event.ticketsData.regularTicketFee)} ETN`
-                  : 'N/A'}
+                    ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
+                    : userTicketType === 'REGULAR' && event.ticketsData?.regularTicketFee
+                      ? `${formatEther(event.ticketsData.regularTicketFee)} ETN`
+                      : 'N/A'}
               </span>
             </div>
 
@@ -964,7 +998,7 @@ const EventDetails = () => {
   };
 
   // Purchase ticket section component
-  const PurchaseTicketSection = () => (
+  const PurchaseTicketSection: React.FC = () => (
     <div className="rounded-lg border border-borderStroke p-6">
       <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
         🎟️ {authenticated ? 'Get Your Ticket' : 'Ticket Information'}
@@ -1008,7 +1042,7 @@ const EventDetails = () => {
   );
 
   // No tickets available component
-  const NoTicketsSection = () => (
+  const NoTicketsSection: React.FC = () => (
     <div className="rounded-lg border border-borderStroke p-6">
       <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
         🎟️ Tickets
@@ -1064,8 +1098,8 @@ const EventDetails = () => {
                   }
                 })()
               : new Date() < new Date(Number(event.endDate) * 1000)
-              ? 'Event is live now!'
-              : 'Event has ended'}
+                ? 'Event is live now!'
+                : 'Event has ended'}
           </p>
         </div>
 
@@ -1077,9 +1111,10 @@ const EventDetails = () => {
               alt="Event Banner"
               className="w-full h-64 object-cover"
               onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = '/placeholder-image.jpg';
-                e.target.alt = 'Image not available';
+                const target = e.target as HTMLImageElement;
+                target.onerror = null;
+                target.src = '/placeholder-image.jpg';
+                target.alt = 'Image not available';
               }}
             />
           ) : (
@@ -1149,7 +1184,7 @@ const EventDetails = () => {
                 {/* Ticket Creation Section for Organizer */}
                 {(Number(event.ticketType) === EventType.FREE && !ticketCreated) ||
                 (Number(event.ticketType) === EventType.PAID &&
-                  (!event.ticketsData.hasRegularTicket || !event.ticketsData.hasVIPTicket)) ? (
+                  (!event.ticketsData?.hasRegularTicket || !event.ticketsData?.hasVIPTicket)) ? (
                   <TicketCreationSection
                     event={event}
                     fetchEventDetails={loadEventDetails}

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ethers } from 'ethers';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Calendar, Ticket, RefreshCw, QrCode } from 'lucide-react';
 import { EventImg1 } from '../../assets';
@@ -55,12 +54,6 @@ const MyEventsComponent = () => {
     attendanceRate: number;
   }
 
-  interface Stats {
-    totalRevenue: number;
-    revenuePending: number;
-    refundsIssued: number;
-  }
-
   const formatDate = (timestamp: number | string | undefined): string => {
     if (!timestamp) return 'TBD';
 
@@ -102,7 +95,7 @@ const MyEventsComponent = () => {
 
     try {
       const tokenBalanceWei = await publicClient.getBalance({
-        address: ethers.utils.getAddress(wallets[0].address),
+        address: `0x${walletAddress}`,
       });
 
       const formattedBalance = formatEther(tokenBalanceWei);
@@ -125,12 +118,12 @@ const MyEventsComponent = () => {
 
     try {
       // Use the optimized contract function to get events with tickets
-      const eventsWithTicketIds: any[] = await publicClient.readContract({
+      const eventsWithTicketIds = (await publicClient.readContract({
         address: TICKET_CITY_ADDR,
         abi: TICKET_CITY_ABI,
         functionName: 'getEventsWithTicketByUser',
         args: [walletAddress],
-      });
+      })) as unknown[];
 
       console.log('Events with tickets IDs:', eventsWithTicketIds);
 
@@ -147,7 +140,16 @@ const MyEventsComponent = () => {
         const eventsData = await Promise.all(
           eventsWithTicketIds.map(async (eventId) => {
             try {
-              const eventIdStr = eventId.toString();
+              let eventIdStr: string;
+              if (typeof eventId === 'bigint' || typeof eventId === 'number') {
+                eventIdStr = eventId.toString();
+              } else if (typeof eventId === 'string') {
+                eventIdStr = eventId;
+              } else {
+                // Handle other cases or throw an error
+                throw new Error('eventId is not a valid type');
+              }
+
               const eventData = await publicClient.readContract({
                 address: TICKET_CITY_ADDR,
                 abi: TICKET_CITY_ABI,
