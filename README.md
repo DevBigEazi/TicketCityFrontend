@@ -1,255 +1,116 @@
-# Ticket City - Technical Documentation
+# Ticket City - Technical Documentation (React Vite)
 
-'Ticket_City contract successfully deployed to': '0x6fd1F53799bC0312a98C36eBA030d3aA7B68264f'
+## Project Overview
 
-## Smart Contract Architecture
+Ticket City is a blockchain-based event ticketing platform built with React Vite. It enables event organizers to create events and sell tickets as NFTs while ensuring secure transactions using ETN.
 
-### Core Components
+## Key Features
 
-1. `Ticket_City.sol`: Main contract handling event logic and XFI payments
-2. `Ticket_NFT.sol`: Non-transferable NFT implementation for event tickets
-3. `Types.sol`: Data structures and enums
-4. `Errors.sol`: Custom error definitions
+- Event creation with flexible ticket types (FREE/PAID).
+- Ticket categories: Regular and VIP for paid events.
+- Secure transactions through ETN payments.
+- Attendance tracking and verification.
+- NFT-based ticket issuance.
+- Automated ticket pricing (Future Feature).
+- Event discovery tools (Future Feature).
+- Stablecoin payments (Future Feature).
 
-#### Security Measures
+## Prerequisites
 
-- NonReentrant guard for payment functions
-- Event organizer verification
-- Minimum attendance rate requirements
-- Revenue release conditions
-
-### Smart Contract Interactions
-
-#### Event Creation Flow
-
-```mermaid
-graph TD
-    A[Organizer] -->|Creates Event| B[Ticket_City Contract]
-    B -->|Deploys| C[NFT Contract]
-    B -->|Sets| D[Ticket Types]
-    D -->|FREE| E[Single Ticket Type]
-    D -->|PAID| F[Regular/VIP Options]
-```
-
-#### Ticket Purchase Flow
-
-```mermaid
-graph TD
-    A[Attendee] -->|Sends XFI| B[Ticket_City Contract]
-    B -->|Validates Payment| C[Payment Validation]
-    C -->|Success| D[Mint NFT Ticket]
-    D -->|Updates| E[Event Records]
-```
-
-#### Authentication Flow
-
-- Web2-like auth flow during which an embedded evm wallet will be created for the users
-- A web3 auth for guest users
-
-### Key Features Implementations
-
-- Event creation with flexible ticket types (FREE/PAID)
-- Ticket categories: Regular and VIP for paid events
-- Revenue management through XFI native token
-- Attendance tracking and verification system
-- Tickets issued as NFTs for security
-- Automated ticket pricing based on demand (Future Implementation)
-- Event discovery tools, including referral programs and discount codes (Future Implementation)
-- Stablecoins payment (Future Implementation)
-
-### Payments & Refunds
-
-- Tickets purchased using XFI
-- Organizers pay a small platform service fee (30 XFI) for paid events
-- Ticket payments held safely until the event ends
-- If an event is canceled, attendees get a refund plus a 2 XFI gas fee compensation from the organiser (Future Implementation)
-
-### Key Features Implementations
-
-- Event creation with flexible ticket types (FREE/PAID)
-- Ticket categories: Regular and VIP for paid events
-- Revenue management through XFI native token
-- Attendance tracking and verification system
-- Tickets issued as NFTs for security
-- Automated ticket pricing based on demand (Future Implementation)
-- Event discovery tools, including referral programs and discount codes (Future Implementation)
-- Stablecoins payment (Future Implementation)
-
-### Payments & Refunds
-
-- Tickets purchased using XFI
-- Organizers pay a small platform service fee (30 XFI) for paid events
-- Ticket payments held safely until the event ends
-- If an event is canceled, attendees get a refund plus a 2 XFI gas fee compensation from the organiser (Future Implementation)
-
-### Revenue Management
-
-- XFI payments held in contract
-- 60% minimum attendance requirement
-- Automated revenue release post-event
-- Manual release option for owner
-
-### Event Verification System
-
-- Attendance tracked through QR codes or wallet authentication
-- Attendee-controlled attendance marking
-- Bulk verification support by an attendee that registered for others (Future Implementation)
-- Attendance rate calculation
-- Revenue release conditions
-
-## Contract Constants
-
-- `FREE_TICKET_PRICE`: 0 XFI
-- `MINIMUM_ATTENDANCE_RATE`: 60%
-
-## Error Handling
-
-- Custom errors for gas optimization
-- Comprehensive validation checks
-- Secure payment processing
-
-Smart Contract Repository: https://github.com/CityBlockLab/TicketCitySmartContract
-
-## Development Environment
-
-### Prerequisites
-
-- Node.js (v16 or higher)
+- Node.js (v16+)
 - npm or yarn
 - Git
-- Alchemy API key for CrossFi Testnet access
+- ANKR RPC (Electroneum Testnet)
 
-### Project Setup
+## Installation & Setup
 
 ```bash
 # Clone repository
-git clone https://github.com/CityBlockLab/TicketCityFrontend
+git clone https://github.com/DevBigEazi/TicketCityFrontend
 cd TicketCityFrontend
-
-# Install dependencies
-yarn
-
-# Copy environment file
-check hardhat config file...
-```
-
-## Installation Instructions
-
-### Prerequisites
-
-- Node.js (v16 or higher)
-- npm or yarn
-- Git
-
-### Getting Started
-
-````bash
-# Clone repository
-git clone https://github.com/CityBlockLab/Ticket_City_Smart_Contract
-cd Ticket_City_Smart_Contract
 
 # Install dependencies
 yarn install
 
+# Copy environment file contents
+cp .env.example
+.env.local is the original file
+
 # Start development server
-npm run dev
+yarn dev
+```
+
+## React Component Structure
+
+### Event Creation Flow
+
+1. **CreateEventFormComponent**: Handles event input fields and validation.
+2. **EventPreview**: Displays entered event details for review.
+3. **CreateTicketComponent**: Allows organizers to define ticket categories.
+4. **handleSubmit**: Calls smart contract functions (`createEvent` and `createTicket`).
+5. **useMulticall**: Ensures atomic transaction execution.
+6. **EventListComponent**: Fetches and displays created events.
+
+### Ticket Purchase Flow
+
+1. **TicketPurchaseComponent**: Handles user interaction for ticket buying.
+2. **validatePayment**: Verifies ETN transaction.
+3. **MintTicketNFT**: Issues NFT-based tickets upon successful payment.
+4. **updateEventRecords**: Updates event database with new ticket holders.
+
+### Authentication Flow
+
+- **Web2 Auth**: Creates an embedded EVM wallet for users.
+- **Web3 Auth**: Direct wallet connection for guest users.
+
+## Revenue Management
+
+- ETN payments held securely in smart contract.
+- Minimum 60% attendance requirement for revenue release.
+- Automatic or manual revenue release post-event.
+
+## Event Verification
+
+- QR code or wallet authentication.
+- Attendee-controlled attendance marking.
+- Bulk verification support (Future Feature).
+
+## Error Handling
+
+- Comprehensive form validation.
+- Secure API interactions.
+- User-friendly error messages.
 
 ## Development Workflow
 
+### Contributing Guidelines
 
-
-## Contributing Guidelines
-
-### Issue Management
-
-- Use provided issue templates
-- Tag with appropriate labels
-- Include detailed description
-- Tag repository @devbigeazi
-
-2. **Picking Issues**
-   - Comment on the issue you want to work on
-   - Wait for assignment
-   - Tag repository @devbigeazi
-
-### Branch Management
-
-```bash
-# Create new feature branch
-git checkout -b feature/issue-number-description
-
-# Create new bugfix branch
-git checkout -b fix/issue-number-description
-
-# Create new documentation branch
-git checkout -b docs/issue-number-description
-````
-
-### Pull Request Process
-
-1. **Before Submitting**
-
-   - Run tests: `npx hardhat test`
-   - Generate coverage: `npx hardhat coverage`
-   - Update documentation if needed
-   - Ensure clean compilation
-
-2. **Submission Requirements**
-
-   - Link related issue(s)
-   - Provide detailed description
-   - Include test results
-   - Tag repository owner
-
-3. **Review Process**
-   - Address review comments
-   - Update PR as needed
-   - Maintain communication
+- Use GitHub Issues for tracking.
+- Follow feature-based branch naming (`feature/issue-number-description`).
+- Run tests before submitting PRs&#x20;
+- Provide detailed PR descriptions.
 
 ### Code Standards
 
-- Follow Solidity style guide
-- Use NatSpec comments
-- Implement proper error handling
-- Maintain test coverage
-- Follow gas optimization practices
+- Maintain clean React component structure.
+- Optimize API calls and contract interactions.
+- Follow best practices for UI/UX consistency.
 
-## Security Considerations
+## Support & Resources
 
-1. **Access Control**
+- **GitHub Issues**: For reporting bugs and requesting features.
+- **Telegram Community**: General discussions and support.
+- **Documentation**: Guides and API references.
 
-   - Implement role-based access
-   - Use OpenZeppelin's Ownable where appropriate
-   - Validate all inputs
+For additional support:
 
-2. **Payment Handling**
+1. Check documentation.
+2. Search closed issues.
+3. Join Telegram community.
+4. Contact @DevBigEazi.
 
-   - Use pull over push payments
-   - Implement reentrancy guards
-   - Handle edge cases
-
-3. **Smart Contract Security**
-   - Follow SCSVS guidelines
-   - Implement emergency stops
-   - Document assumptions
-   - Consider gas limitations
-
-## Support and Resources
-
-- GitHub Issues: Technical problems and bug reports
-- Telegram Community: General discussion and support
-- Documentation: Comprehensive guides and references
-- Security: Private disclosure process for vulnerabilities
-
-For additional support or questions:
-
-1. Check existing documentation
-2. Search closed issues
-3. Join Telegram community
-4. Contact @devbigeazi
-
-## All tests passed
-
-<img width="634" alt="tickect_city_test" src="https://github.com/user-attachments/assets/d1763712-6829-4711-b00d-3486a8f90ecc" />
+## Test Coverage
 
 ## License
+
+MIT Licensed
