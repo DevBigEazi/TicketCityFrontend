@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutGrid, List, RefreshCw } from 'lucide-react';
 import EventCard from './EventsCard';
-import { Event, EventFilter, ViewMode } from '../../types';
+import { UIEvent, EventFilter, ViewMode } from '../../types';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 
@@ -16,7 +16,7 @@ const EventsSection: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<EventFilter>('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<'Date' | 'Popularity' | 'Ticket Price'>('Date');
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<UIEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -111,7 +111,7 @@ const EventsSection: React.FC = () => {
       );
 
       // Step 3: Fetch ticket details for each event
-      const formattedEvents: Event[] = await Promise.all(
+      const formattedEvents: UIEvent[] = await Promise.all(
         eventsData
           .filter((event): event is { eventId: any; eventData: any } => event !== null)
           .map(async ({ eventId, eventData }) => {
@@ -191,8 +191,8 @@ const EventsSection: React.FC = () => {
               Number((eventData as any).expectedAttendees) -
               Number((eventData as any).userRegCount);
 
-            // Create proper Event object with typed rawData
-            const event: Event = {
+            // Create proper UIEvent object with typed rawData
+            const event: UIEvent = {
               id: eventId.toString(),
               type: getTicketType(eventData),
               title: (eventData as any).title || 'Untitled Event',
@@ -231,7 +231,7 @@ const EventsSection: React.FC = () => {
       console.log('Formatted events:', formattedEvents);
 
       // Filter out events that have ended AND ensure at least one ticket is available
-      const activeEvents: Event[] = formattedEvents.filter(
+      const activeEvents: UIEvent[] = formattedEvents.filter(
         (event) => !event.hasEnded && event.hasTicketCreated,
       );
 

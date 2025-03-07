@@ -1,6 +1,6 @@
 import React from 'react';
-import { formatEther as viemFormatEther } from 'viem'; // Import formatEther from viem
 
+// Basic navigation and UI types
 export interface NavLink {
   icon: React.ReactNode;
   label: string;
@@ -8,51 +8,10 @@ export interface NavLink {
 }
 
 export type ViewMode = 'grid' | 'list';
-
 export type EventFilter = 'Regular' | 'All' | 'Free' | 'Paid' | 'VIP' | 'Virtual' | 'In-Person';
 
-// Interface for TicketCreationSection component
-export interface TicketCreationEvent {
-  id: number | string; // Accept both number and string to handle different sources
-  ticketType: number;
-  ticketNFTAddr: `0x${string}` | string; // Accept both Ethereum address format and regular string
-  ticketsData?: {
-    hasRegularTicket: boolean;
-    hasVIPTicket: boolean;
-    regularTicketFee: bigint | string; // Accept both bigint and string to handle different sources
-    vipTicketFee: bigint | string; // Accept both bigint and string to handle different sources
-  };
-}
-
-export interface EventTicketsData {
-  hasRegularTicket: boolean;
-  hasVIPTicket: boolean;
-  regularTicketFee: bigint;
-  vipTicketFee: bigint;
-  ticketURI: string;
-  regularTicketNFT?: string; // Optional for backward compatibility
-  vipTicketNFT?: string; // Optional for backward compatibility
-}
-
-export interface EventData {
-  id: number;
-  title: string;
-  desc: string;
-  organiser: `0x${string}`; // Address format
-  location: string;
-  startDate: bigint;
-  endDate: bigint;
-  ticketType: number; // Using enum values
-  ticketNFTAddr: `0x${string}`; // Address format
-  userRegCount: number;
-  verifiedAttendeesCount: number;
-  expectedAttendees: number;
-  imageUri: string;
-  ticketsData?: EventTicketsData; // Optional because it's added after fetching
-}
-
-// Enums for ticket types to match the contract
-export enum EventType {
+// Enum definitions for ticket types to match the contract
+export enum TicketType {
   FREE = 0,
   PAID = 1,
 }
@@ -63,33 +22,56 @@ export enum PaidTicketCategory {
   VIP = 2,
 }
 
-// Props types for components in EventDetails
-export interface ErrorStateProps {
-  error: string;
-  navigate: (to: number) => void;
+// Core data structures that match contract data
+export interface EventTicketsData {
+  hasRegularTicket: boolean;
+  hasVIPTicket: boolean;
+  regularTicketFee: bigint;
+  vipTicketFee: bigint;
+  ticketURI: string;
+  regularTicketNFT?: string; // Optional for backward compatibility
+  vipTicketNFT?: string; // Optional for backward compatibility
 }
 
-export interface NoEventStateProps {
-  navigate: (to: number) => void;
+export interface EventDetails {
+  title: string;
+  desc: string;
+  imageUri: string;
+  location: string;
+  startDate: bigint; // Use bigint for uint256 values
+  endDate: bigint;
+  expectedAttendees: bigint;
+  ticketType: number; // Using number instead of typeof TicketType for contract compatibility
+  paidTicketCategory?: number; // Made optional for compatibility
+  userRegCount: number;
+  verifiedAttendeesCount: number;
+  ticketFee?: bigint; // Made optional for compatibility
+  ticketNFTAddr: `0x${string}` | string;
+  organiser: `0x${string}` | string;
 }
 
-export interface TicketTypeSelectorProps {
-  event: EventData;
-  selectedTicketType: string;
-  setSelectedTicketType: (type: string) => void;
-  authenticated: boolean;
-  isPurchasing: boolean;
-}
-
-export interface TicketCreationSectionProps {
-  event: TicketCreationEvent;
-  fetchEventDetails: (showLoading?: boolean) => Promise<void>;
-  isLoading: boolean;
-  setIsLoading: (loading: boolean) => void;
-}
-
-// This is your existing Event interface for the UI components
+// Complete Event interface for use with contract data
 export interface Event {
+  id: number;
+  details: EventDetails;
+  ticketsData: EventTicketsData;
+}
+
+// Interface specifically for the TicketCreationSection component
+export interface TicketCreationEvent {
+  id: number | string;
+  ticketType: number;
+  ticketNFTAddr: `0x${string}` | string;
+  ticketsData: {
+    hasRegularTicket: boolean;
+    hasVIPTicket: boolean;
+    regularTicketFee: bigint | string;
+    vipTicketFee: bigint | string;
+  };
+}
+
+// UI variant of Event with formatted data for display
+export interface UIEvent {
   id: string;
   type: string;
   title: string;
@@ -114,77 +96,37 @@ export interface Event {
   hasTicketCreated: boolean;
   hasRegularTicket: boolean;
   hasVIPTicket: boolean;
-  // Accept either a structured object or the original EventData
   rawData: {
     startDate?: string | bigint;
     endDate?: string | bigint;
     [key: string]: any;
   };
-  // Optional property that might be needed for hasNotStarted check
   hasNotStarted?: boolean;
 }
 
-// Helper type for converting between contract data and UI data
-export interface EventConversionOptions {
-  includeRawData?: boolean;
+// Props types for components
+export interface ErrorStateProps {
+  error: string;
+  navigate: (to: number) => void;
 }
 
-// Helper function to convert EventData (contract) to Event (UI)
-export function convertEventDataToEvent(
-  eventData: EventData,
-  options: EventConversionOptions = {},
-): Event {
-  const { includeRawData = true } = options;
+export interface NoEventStateProps {
+  navigate: (to: number) => void;
+}
 
-  const now = Math.floor(Date.now() / 1000);
-  const startTime = Number(eventData.startDate);
-  const endTime = Number(eventData.endDate);
-  console.log(endTime);
+export interface TicketTypeSelectorProps {
+  event: EventData;
+  selectedTicketType: string;
+  setSelectedTicketType: (type: string) => void;
+  authenticated: boolean;
+  isPurchasing: boolean;
+}
 
-  // Format rawData to match expected structure
-  const formattedRawData = {
-    startDate: eventData.startDate.toString(),
-    endDate: eventData.endDate.toString(),
-    // Include other properties from eventData that might be needed
-    organiser: eventData.organiser,
-    ticketType: eventData.ticketType,
-    ticketNFTAddr: eventData.ticketNFTAddr,
-    // Add more as needed
-  };
-
-  return {
-    id: eventData.id.toString(),
-    type: eventData.ticketType === EventType.FREE ? 'Free' : 'Paid',
-    title: eventData.title,
-    description: eventData.desc,
-    location: eventData.location,
-    date: new Date(Number(eventData.startDate) * 1000).toISOString(),
-    endDate: new Date(Number(eventData.endDate) * 1000).toISOString(),
-    price: {
-      regular: eventData.ticketsData
-        ? Number(viemFormatEther(eventData.ticketsData.regularTicketFee))
-        : 0,
-      vip: eventData.ticketsData ? Number(viemFormatEther(eventData.ticketsData.vipTicketFee)) : 0,
-    },
-    image: eventData.imageUri,
-    organiser: eventData.organiser,
-    attendees: {
-      registered: eventData.userRegCount,
-      expected: eventData.expectedAttendees,
-      verified: eventData.verifiedAttendeesCount,
-    },
-    remainingTickets: eventData.expectedAttendees - eventData.userRegCount,
-    hasEnded: Date.now() > Number(eventData.endDate) * 1000,
-    hasNotStarted: now < startTime,
-    isVerified: true, // Assuming events from contract are verified
-    hasTicketCreated: Boolean(
-      eventData.ticketNFTAddr &&
-        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
-    ),
-    hasRegularTicket: Boolean(eventData.ticketsData?.hasRegularTicket),
-    hasVIPTicket: Boolean(eventData.ticketsData?.hasVIPTicket),
-    rawData: includeRawData ? formattedRawData : {},
-  };
+export interface TicketCreationSectionProps {
+  event: TicketCreationEvent;
+  fetchEventDetails: (showLoading?: boolean) => Promise<void>;
+  isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
 }
 
 export interface FooterSection {
@@ -192,35 +134,83 @@ export interface FooterSection {
   links: string[];
 }
 
-// Wallet and blockchain related types
-export interface Wallet {
-  address: string;
-  getEthereumProvider: () => Promise<any>;
-  // Add other wallet properties as needed
+// API data type - matches your current EventData
+export interface EventData {
+  id: number;
+  title: string;
+  desc: string;
+  organiser: `0x${string}`; // Address format
+  location: string;
+  startDate: bigint;
+  endDate: bigint;
+  ticketType: number; // Using enum values
+  ticketNFTAddr: `0x${string}`; // Address format
+  userRegCount: number;
+  verifiedAttendeesCount: number;
+  expectedAttendees: number;
+  imageUri: string;
+  ticketsData?: EventTicketsData; // Optional because it's added after fetching
 }
 
-// Helper function type definition
-export type FormatEther = (wei: bigint) => string;
-
-// A simple formatEther implementation for use outside of viem context
-// Note: This is only a fallback - use the viem imported function when possible
-export function formatEther(wei: bigint): string {
-  return (Number(wei) / 1e18).toString();
+// Helper type for converting between contract data and UI data
+export interface EventConversionOptions {
+  includeRawData?: boolean;
 }
 
-// Helper function to adapt EventData for TicketCreationSection
-export function adaptEventForTicketCreation(eventData: EventData): TicketCreationEvent {
+// Helper functions
+export function adaptEventForTicketCreation(event: Event): TicketCreationEvent {
+  // Safely handle the ticketType property
+  let ticketTypeValue: number;
+
+  if (typeof event.details.ticketType === 'number') {
+    // If it's already a number, use it directly
+    ticketTypeValue = event.details.ticketType;
+  } else if (event.details.ticketType === TicketType.FREE) {
+    // If it matches the FREE enum value
+    ticketTypeValue = TicketType.FREE;
+  } else {
+    // Default to PAID
+    ticketTypeValue = TicketType.PAID;
+  }
+
   return {
-    id: eventData.id,
-    ticketType: eventData.ticketType,
-    ticketNFTAddr: eventData.ticketNFTAddr,
-    ticketsData: eventData.ticketsData
-      ? {
-          hasRegularTicket: eventData.ticketsData.hasRegularTicket,
-          hasVIPTicket: eventData.ticketsData.hasVIPTicket,
-          regularTicketFee: eventData.ticketsData.regularTicketFee,
-          vipTicketFee: eventData.ticketsData.vipTicketFee,
-        }
-      : undefined,
+    id: event.id,
+    ticketType: ticketTypeValue,
+    ticketNFTAddr: event.details.ticketNFTAddr,
+    ticketsData: {
+      hasRegularTicket: event.ticketsData.hasRegularTicket,
+      hasVIPTicket: event.ticketsData.hasVIPTicket,
+      regularTicketFee: event.ticketsData.regularTicketFee,
+      vipTicketFee: event.ticketsData.vipTicketFee,
+    },
+  };
+}
+
+// Also fix the convertContractEventToTicketCreationEvent function
+export function convertContractEventToTicketCreationEvent(event: Event): TicketCreationEvent {
+  // Safely handle the ticketType property
+  let ticketTypeValue: number;
+
+  if (typeof event.details.ticketType === 'number') {
+    // If it's already a number, use it directly
+    ticketTypeValue = event.details.ticketType;
+  } else if (event.details.ticketType === TicketType.FREE) {
+    // If it matches the FREE enum value
+    ticketTypeValue = TicketType.FREE;
+  } else {
+    // Default to PAID
+    ticketTypeValue = TicketType.PAID;
+  }
+
+  return {
+    id: event.id,
+    ticketType: ticketTypeValue,
+    ticketNFTAddr: event.details.ticketNFTAddr,
+    ticketsData: {
+      hasRegularTicket: event.ticketsData.hasRegularTicket,
+      hasVIPTicket: event.ticketsData.hasVIPTicket,
+      regularTicketFee: event.ticketsData.regularTicketFee,
+      vipTicketFee: event.ticketsData.vipTicketFee,
+    },
   };
 }

@@ -1,16 +1,15 @@
 import React from 'react';
 import { Calendar, MapPin, Ticket, Users, CheckCircle, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Event } from '../../types';
+import { UIEvent, Event } from '../../types';
 
 interface EventCardProps {
-  event: Event;
+  event: Event | UIEvent;
   viewMode?: 'grid' | 'list';
   hasTicket?: boolean;
   ticketType?: string;
   isDashboard?: boolean; // Flag to determine if we're in dashboard or listing view
   isVerified?: boolean; // Flag to determine if the ticket is verified
-
   onCheckIn?: (eventId: string) => void; // Optional check-in callback
 }
 
@@ -20,6 +19,7 @@ const EventCard: React.FC<EventCardProps> = ({
   hasTicket = false,
   //ticketType = 'Unknown',
   isDashboard = false,
+  isVerified,
   onCheckIn,
 }) => {
   // Guard against undefined or null event
@@ -32,18 +32,68 @@ const EventCard: React.FC<EventCardProps> = ({
     );
   }
 
-  // Safely extract properties with defaults to prevent runtime errors
-  const {
-    id = '',
-    title = 'Untitled Event',
-    location = 'TBD',
-    date = 'TBD',
-    price = { regular: 0, vip: 0 },
-    image = '/placeholder-event.jpg',
-    type = 'Unknown',
-    rawData = {} as { startDate?: string | bigint; endDate?: string | bigint; [key: string]: any },
-    isVerified = false,
-  } = event;
+  // Helper function to determine if this is a UIEvent
+  const isUIEvent = (event: Event | UIEvent): event is UIEvent => {
+    return 'type' in event && 'image' in event && 'price' in event;
+  };
+
+  // Extract data based on event type
+  let id: string | number = '';
+  let title = 'Untitled Event';
+  let location = 'TBD';
+  let date = 'TBD';
+  let price = { regular: 0, vip: 0 };
+  let image = '/placeholder-event.jpg';
+  let type = 'Unknown';
+  let rawData: { startDate?: string | bigint; endDate?: string | bigint; [key: string]: any } = {};
+  let eventVerificationStatus = false;
+  let attendees = { registered: 0, expected: 0, verified: 0 };
+
+  if (isUIEvent(event)) {
+    // UIEvent extraction
+    id = event.id;
+    title = event.title;
+    location = event.location;
+    date = event.date;
+    price = event.price;
+    image = event.image;
+    type = event.type;
+    rawData = event.rawData;
+    eventVerificationStatus = event.isVerified;
+    attendees = event.attendees;
+  } else {
+    // Event extraction (contract data)
+    id = event.id;
+    title = event.details.title;
+    location = event.details.location;
+    // Format date from bigint
+    const startDate = new Date(Number(event.details.startDate) * 1000);
+    date = startDate.toLocaleDateString();
+    // Extract price info from ticketsData
+    if (event.ticketsData) {
+      price = {
+        regular: event.ticketsData.hasRegularTicket
+          ? Number(event.ticketsData.regularTicketFee)
+          : 0,
+        vip: event.ticketsData.hasVIPTicket ? Number(event.ticketsData.vipTicketFee) : 0,
+      };
+    }
+    // Set image from imageUri
+    image = event.details.imageUri || '/placeholder-event.jpg';
+    // Determine type based on ticketType
+    type = event.details.ticketType === 0 ? 'Free' : 'Paid';
+    // Set raw data for date calculations
+    rawData = {
+      startDate: event.details.startDate,
+      endDate: event.details.endDate,
+    };
+    // Calculate attendees
+    attendees = {
+      registered: event.details.userRegCount,
+      expected: Number(event.details.expectedAttendees),
+      verified: event.details.verifiedAttendeesCount,
+    };
+  }
 
   // Check if event has started but not ended
   const isEventLive = () => {
@@ -101,13 +151,16 @@ const EventCard: React.FC<EventCardProps> = ({
     }
   };
 
+  // Use the isVerified prop from component props if provided, otherwise use the event's status
+  const ticketIsVerified = typeof isVerified !== 'undefined' ? isVerified : eventVerificationStatus;
+
   // Show the right badge based on verification status only (ticket label removed)
   const getTicketBadge = () => {
     if (!hasTicket || !isDashboard) {
       return null;
     }
 
-    if (isVerified) {
+    if (ticketIsVerified) {
       return (
         <div className="absolute top-4 right-4 bg-green-500 text-white px-2 py-1 rounded-md text-xs font-medium flex items-center">
           <CheckCircle className="w-3 h-3 mr-1" />
@@ -175,7 +228,7 @@ const EventCard: React.FC<EventCardProps> = ({
   const handleCheckInClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
     if (onCheckIn) {
-      onCheckIn(id);
+      onCheckIn(id.toString());
     }
   };
 
@@ -329,11 +382,11 @@ const EventCard: React.FC<EventCardProps> = ({
               <span>{type === 'Free' ? 'Free' : `${regularPrice} ETN`}</span>
             </div>
 
-            {event.attendees && (
+            {attendees && (
               <div className="flex items-center text-sm text-textGray">
                 <Users className="w-4 h-4 mr-1 flex-shrink-0 text-primary" />
                 <span>
-                  {event.attendees.registered}/{event.attendees.expected}
+                  {attendees.registered}/{attendees.expected}
                 </span>
               </div>
             )}
@@ -344,9 +397,11 @@ const EventCard: React.FC<EventCardProps> = ({
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs text-textGray">Ticket Status:</div>
               <div
-                className={`text-xs font-medium ${isVerified ? 'text-green-400' : 'text-blue-400'}`}
+                className={`text-xs font-medium ${
+                  ticketIsVerified ? 'text-green-400' : 'text-blue-400'
+                }`}
               >
-                {isVerified ? 'Checked In' : 'Not Checked In'}
+                {ticketIsVerified ? 'Checked In' : 'Not Checked In'}
               </div>
             </div>
 
@@ -354,19 +409,19 @@ const EventCard: React.FC<EventCardProps> = ({
               {/* Check-in button - disabled if verified or event hasn't started yet */}
               <button
                 onClick={handleCheckInClick}
-                disabled={isVerified || hasNotStarted()}
+                disabled={ticketIsVerified || hasNotStarted()}
                 className={`
                   flex items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors
                   ${
-                    isVerified
+                    ticketIsVerified
                       ? 'bg-green-500 bg-opacity-20 text-green-500 cursor-not-allowed'
                       : hasNotStarted()
-                        ? 'bg-gray-500 bg-opacity-20 text-gray-400 cursor-not-allowed'
-                        : 'bg-primary hover:bg-primary/90 text-white'
+                      ? 'bg-gray-500 bg-opacity-20 text-gray-400 cursor-not-allowed'
+                      : 'bg-primary hover:bg-primary/90 text-white'
                   }
                 `}
               >
-                {isVerified ? (
+                {ticketIsVerified ? (
                   <>
                     <Check className="w-3 h-3" />
                     Verified

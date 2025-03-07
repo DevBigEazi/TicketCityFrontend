@@ -1,5 +1,5 @@
-import React from 'react';
-import { useEffect, useState, useRef } from 'react';
+import React, { useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { usePrivy, useUser, useWallets } from '@privy-io/react-auth';
@@ -14,38 +14,16 @@ import TicketCreationSection from '../../components /Events/TicketCreationSectio
 import EventDetailsFooter from '../../components /Events/EventDetailsFooter';
 import { pinata } from '../../utils/pinata';
 
+// Import unified types
 import {
-  EventData,
-  EventTicketsData,
-  EventType,
+  Event,
+  EventDetails as EventDetailsType,
+  TicketType,
   PaidTicketCategory,
   ErrorStateProps,
   NoEventStateProps,
-} from '../../types';
-
-/**
- * Converts EventData to the format expected by TicketCreationSection
- */
-const adaptEventForTicketCreation = (eventData: EventData) => {
-  return {
-    id: eventData.id, // Pass as number which will be compatible with the updated interface
-    ticketType: eventData.ticketType,
-    ticketNFTAddr: eventData.ticketNFTAddr,
-    ticketsData: eventData.ticketsData
-      ? {
-          hasRegularTicket: eventData.ticketsData.hasRegularTicket,
-          hasVIPTicket: eventData.ticketsData.hasVIPTicket,
-          regularTicketFee: eventData.ticketsData.regularTicketFee, // Pass as bigint
-          vipTicketFee: eventData.ticketsData.vipTicketFee, // Pass as bigint
-        }
-      : {
-          hasRegularTicket: false,
-          hasVIPTicket: false,
-          regularTicketFee: 0n,
-          vipTicketFee: 0n,
-        },
-  };
-};
+  adaptEventForTicketCreation,
+} from '../../types/index';
 
 // Loading state component
 const LoadingState = () => (
@@ -60,7 +38,7 @@ const LoadingState = () => (
 );
 
 // Error state component
-const ErrorState: React.FC<ErrorStateProps> = ({ error, navigate }) => (
+const ErrorState = ({ error, navigate }: ErrorStateProps) => (
   <div className="min-h-screen bg-background p-8">
     <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
       <h1 className="text-white text-2xl font-bold mb-4 text-center">Error</h1>
@@ -76,7 +54,7 @@ const ErrorState: React.FC<ErrorStateProps> = ({ error, navigate }) => (
 );
 
 // No event state component
-const NoEventState: React.FC<NoEventStateProps> = ({ navigate }) => (
+const NoEventState = ({ navigate }: NoEventStateProps) => (
   <div className="min-h-screen bg-background p-8">
     <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
       <h1 className="text-white text-2xl font-bold mb-4 text-center">Event Not Found</h1>
@@ -93,40 +71,42 @@ const NoEventState: React.FC<NoEventStateProps> = ({ navigate }) => (
   </div>
 );
 
-const EventDetails: React.FC = () => {
+const EventDetails = () => {
   const navigate = useNavigate();
-  const { eventId } = useParams<{ eventId: string }>();
+  const { eventId } = useParams();
   const { login, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { refreshUser } = useUser();
-  const [balance, setBalance] = useState<string>('Loading...');
+  const [balance, setBalance] = useState('Loading...');
 
   // Local state for event data
-  const [event, setEvent] = useState<EventData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isOrganizer, setIsOrganizer] = useState<boolean>(false);
-  const [hasTicket, setHasTicket] = useState<boolean>(false);
-  const [ticketCreated, setTicketCreated] = useState<boolean>(false);
+  const [event, setEvent] = useState<Event | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isOrganizer, setIsOrganizer] = useState(false);
+  const [hasTicket, setHasTicket] = useState(false);
+  const [ticketCreated, setTicketCreated] = useState(false);
 
-  const [attendanceRate, setAttendanceRate] = useState<string>('Loading...');
-  const [selectedTicketType, setSelectedTicketType] = useState<string>('REGULAR');
-  const [purchaseError, setPurchaseError] = useState<string | null>(null);
-  const [isPurchasing, setIsPurchasing] = useState<boolean>(false);
-  const [transactionHash, setTransactionHash] = useState<string>('');
-
-  // Add new state for tracking last update time
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  console.log(lastUpdated);
+  const [attendanceRate, setAttendanceRate] = useState('Loading...');
+  const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
+  const [purchaseError, setPurchaseError] = useState('');
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [transactionHash, setTransactionHash] = useState('');
 
   const publicClient = createPublicClientInstance();
 
+  const walletAddress =
+    wallets && wallets.length > 0 && wallets[0]?.address
+      ? ((wallets[0].address.startsWith('0x')
+          ? wallets[0].address
+          : `0x${wallets[0].address}`) as `0x${string}`)
+      : ('0x0000000000000000000000000000000000000000' as `0x${string}`);
+
+  // Fetch ETN balance
   const getETNBalance = async () => {
     if (!wallets || !wallets[0]?.address) return;
 
     try {
-      const walletAddress = wallets[0].address as `0x${string}`; // Explicitly cast to required format
-
       const balanceWei = await publicClient.getBalance({
         address: walletAddress,
       });
@@ -152,7 +132,7 @@ const EventDetails: React.FC = () => {
     if (showLoadingState) {
       setIsLoading(true);
     }
-    setError(null);
+    setError('');
 
     try {
       const eventIdNumber = parseInt(eventId);
@@ -163,7 +143,7 @@ const EventDetails: React.FC = () => {
         abi: TICKET_CITY_ABI,
         functionName: 'getEvent',
         args: [eventIdNumber],
-      })) as any; // Using any temporarily but will format correctly
+      })) as unknown as EventDetailsType;
 
       // Get ticket information
       const eventTicketsData = (await publicClient.readContract({
@@ -171,60 +151,45 @@ const EventDetails: React.FC = () => {
         abi: TICKET_CITY_ABI,
         functionName: 'eventTickets',
         args: [eventIdNumber],
-      })) as any; // Using any temporarily but will format correctly
+      })) as [boolean, boolean, bigint, bigint, string];
 
       // Format the ticket data properly
-      const formattedTicketsData: EventTicketsData = {
+      const formattedTicketsData = {
         hasRegularTicket: eventTicketsData[0],
         hasVIPTicket: eventTicketsData[1],
         regularTicketFee: eventTicketsData[2],
         vipTicketFee: eventTicketsData[3],
         ticketURI: eventTicketsData[4],
-        regularTicketNFT: eventTicketsData[3],
-        vipTicketNFT: eventTicketsData[4],
       };
 
       // Set event data
-      const formattedEvent: EventData = {
+      const formattedEvent: Event = {
         id: eventIdNumber,
-        title: eventData[0] || '',
-        desc: eventData[1] || '',
-        organiser: eventData[2] as `0x${string}`,
-        location: eventData[3] || '',
-        startDate: eventData[4],
-        endDate: eventData[5],
-        ticketType: Number(eventData[6]),
-        ticketNFTAddr: eventData[7] as `0x${string}`,
-        userRegCount: Number(eventData[8]),
-        verifiedAttendeesCount: Number(eventData[9]),
-        expectedAttendees: Number(eventData[10]),
-        imageUri: eventData[11] || '',
         ticketsData: formattedTicketsData,
+        details: eventData,
       };
 
       setEvent(formattedEvent);
 
       // Check if tickets have been created
       const hasTicketCreated =
-        (Number(formattedEvent.ticketType) === EventType.FREE ||
-          Number(formattedEvent.ticketType) === EventType.PAID) &&
+        (Number(eventData.ticketType) === TicketType.FREE ||
+          Number(eventData.ticketType) === TicketType.PAID) &&
         (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
-        formattedEvent.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
+        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
 
       setTicketCreated(hasTicketCreated);
 
       // Set appropriate initial ticket type based on what's available
       // Determine if tickets have been created - different logic for FREE vs PAID events
-      if (Number(formattedEvent.ticketType) === EventType.FREE) {
+      if (Number(eventData.ticketType) === TicketType.FREE) {
         // For FREE events, we only need the NFT contract address to be set
-        setTicketCreated(
-          formattedEvent.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
-        );
-      } else if (Number(formattedEvent.ticketType) === EventType.PAID) {
+        setTicketCreated(eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000');
+      } else if (Number(eventData.ticketType) === TicketType.PAID) {
         // For PAID events, we need ticket types and NFT contract
         setTicketCreated(
           (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
-            formattedEvent.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
+            eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
         );
       } else {
         setTicketCreated(false);
@@ -233,15 +198,13 @@ const EventDetails: React.FC = () => {
       // If user is authenticated, check for user-specific information
       if (authenticated && wallets && wallets[0]?.address) {
         // Check if this user is the organizer of the event
-        const walletAddress = wallets[0].address as `0x${string}`;
         const isUserOrganizer =
-          walletAddress &&
-          formattedEvent.organiser &&
-          formattedEvent.organiser.toLowerCase() === walletAddress.toLowerCase();
+          !!wallets[0]?.address &&
+          !!eventData.organiser &&
+          eventData.organiser.toLowerCase() === walletAddress.toLowerCase();
 
         setIsOrganizer(isUserOrganizer);
 
-        // Check if user has registered for event
         const hasRegistered = (await publicClient.readContract({
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
@@ -253,17 +216,13 @@ const EventDetails: React.FC = () => {
       }
 
       // Calculate attendance rate
-      if (formattedEvent.userRegCount > 0) {
+      if (eventData.userRegCount > 0) {
         const rate =
-          (Number(formattedEvent.verifiedAttendeesCount) * 100) /
-          Number(formattedEvent.userRegCount);
+          (Number(eventData.verifiedAttendeesCount) * 100) / Number(eventData.userRegCount);
         setAttendanceRate(`${rate.toFixed(1)}%`);
       } else {
         setAttendanceRate('0%');
       }
-
-      // Update the last updated timestamp
-      setLastUpdated(new Date());
     } catch (error: any) {
       setError(`Failed to fetch event details: ${error.message || 'Unknown error'}`);
       setEvent(null); // Reset event state on error
@@ -271,112 +230,6 @@ const EventDetails: React.FC = () => {
       setIsLoading(false);
     }
   };
-
-  // Function to get user's ticket category
-  // const getUserTicketCategory = async (
-  //   eventId: number,
-  //   userAddress: `0x${string}`,
-  // ): Promise<string | null> => {
-  //   if (!eventId || !userAddress) return null;
-
-  //   try {
-  //     // First check if the user has a VIP ticket
-  //     const tickets = (await publicClient.readContract({
-  //       address: TICKET_CITY_ADDR,
-  //       abi: TICKET_CITY_ABI,
-  //       functionName: 'eventTickets',
-  //       args: [eventId],
-  //     })) as any[];
-
-  //     let ticketType = null;
-
-  //     // If user has a VIP ticket
-  //     if (tickets[1] && tickets[4]) {
-  //       // hasVIPTicket and ticketNFT exists
-  //       try {
-  //         const vipBalance = (await publicClient.readContract({
-  //           address: tickets[4] as `0x${string}`, // VIP ticket NFT address
-  //           abi: [
-  //             {
-  //               inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-  //               name: 'balanceOf',
-  //               outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-  //               stateMutability: 'view',
-  //               type: 'function',
-  //             },
-  //           ],
-  //           functionName: 'balanceOf',
-  //           args: [userAddress],
-  //         })) as bigint;
-
-  //         if (vipBalance > 0n) {
-  //           return 'VIP';
-  //         }
-  //       } catch (error) {
-  //         console.error('Error checking VIP ticket balance:', error);
-  //       }
-  //     }
-
-  //     // If user has a REGULAR ticket
-  //     if (tickets[0] && tickets[3]) {
-  //       // hasRegularTicket and ticketNFT exists
-  //       try {
-  //         const regularBalance = (await publicClient.readContract({
-  //           address: tickets[3] as `0x${string}`, // Regular ticket NFT address
-  //           functionName: 'balanceOf',
-  //           abi: [
-  //             {
-  //               inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-  //               name: 'balanceOf',
-  //               outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-  //               stateMutability: 'view',
-  //               type: 'function',
-  //             },
-  //           ],
-  //           args: [userAddress],
-  //         })) as bigint;
-
-  //         if (regularBalance > 0n) {
-  //           return 'REGULAR';
-  //         }
-  //       } catch (error) {
-  //         console.error('Error checking REGULAR ticket balance:', error);
-  //       }
-  //     }
-
-  //     // Get event details to check if it's a FREE event
-  //     const eventData = (await publicClient.readContract({
-  //       address: TICKET_CITY_ADDR,
-  //       abi: TICKET_CITY_ABI,
-  //       functionName: 'getEvent',
-  //       args: [eventId],
-  //     })) as any[];
-
-  //     // If it's a FREE event
-  //     if (Number(eventData[6]) === 0) {
-  //       // FREE ticket type
-  //       return 'FREE';
-  //     }
-
-  //     // If we still don't know the type but user has registered
-  //     const hasRegistered = (await publicClient.readContract({
-  //       address: TICKET_CITY_ADDR,
-  //       abi: TICKET_CITY_ABI,
-  //       functionName: 'hasRegistered',
-  //       args: [userAddress, eventId],
-  //     })) as boolean;
-
-  //     if (hasRegistered) {
-  //       // The user has a ticket, but we couldn't determine the type
-  //       return 'UNKNOWN';
-  //     }
-
-  //     return null;
-  //   } catch (error) {
-  //     console.error('Error getting user ticket category:', error);
-  //     return null;
-  //   }
-  // };
 
   // Use this effect for the initial load
   useEffect(() => {
@@ -411,34 +264,36 @@ const EventDetails: React.FC = () => {
   }, [authenticated, wallets]);
 
   // Format date from timestamp
-  const formatDate = (timestamp: bigint | undefined): string => {
+  const formatDate = (timestamp: any) => {
     if (!timestamp) return 'TBD';
     return new Date(Number(timestamp) * 1000).toDateString();
   };
 
   // Format time from timestamp
-  const formatTime = (timestamp: bigint | undefined): string => {
+  const formatTime = (timestamp: any) => {
     if (!timestamp) return 'TBD';
     return new Date(Number(timestamp) * 1000).toLocaleTimeString();
   };
 
   // Purchase ticket function error handling
+  // Purchase ticket function error handling
   const handlePurchaseTicket = async () => {
-    if (!event || !wallets || !wallets[0]) {
+    // Check if event exists and wallet is connected
+    if (!event || !wallets || !wallets.length || !wallets[0]) {
       setPurchaseError('Event details not available or wallet not connected');
       return;
     }
 
     setIsPurchasing(true);
-    setPurchaseError(null);
+    setPurchaseError('');
 
     try {
       // First check if the event is FREE or PAID
-      const isFreeEvent = Number(event.ticketType) === EventType.FREE;
+      const isFreeEvent = Number(event.details.ticketType) === TicketType.FREE;
 
       // Determine ticket category based on event type and selection
-      let ticketCategory: PaidTicketCategory;
-      let ticketPrice: bigint;
+      let ticketCategory;
+      let ticketPrice;
 
       if (isFreeEvent) {
         // For FREE events, always use NONE (0) category
@@ -446,10 +301,10 @@ const EventDetails: React.FC = () => {
         ticketPrice = 0n;
       } else {
         // For PAID events, use the selected ticket type
-        if (selectedTicketType === 'REGULAR' && event.ticketsData?.hasRegularTicket) {
+        if (selectedTicketType === 'REGULAR' && event.ticketsData.hasRegularTicket) {
           ticketCategory = PaidTicketCategory.REGULAR;
           ticketPrice = event.ticketsData.regularTicketFee;
-        } else if (selectedTicketType === 'VIP' && event.ticketsData?.hasVIPTicket) {
+        } else if (selectedTicketType === 'VIP' && event.ticketsData.hasVIPTicket) {
           ticketCategory = PaidTicketCategory.VIP;
           ticketPrice = event.ticketsData.vipTicketFee;
         } else {
@@ -460,21 +315,23 @@ const EventDetails: React.FC = () => {
       // Get wallet client
       const provider = await wallets[0].getEthereumProvider();
       const walletClient = createWalletClientInstance(provider);
-      const walletAddress = wallets[0].address as `0x${string}`;
 
       try {
+        // Ensure we have a valid wallet address (already prepared at the top)
+        // Confirm it's a proper Ethereum address format
+        if (!walletAddress || walletAddress === '0x0000000000000000000000000000000000000000') {
+          throw new Error('Invalid wallet address');
+        }
+
         // Purchase the ticket
         const hash = await walletClient.writeContract({
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'purchaseTicket',
           args: [event.id, ticketCategory],
-          value: ticketPrice,
+          value: BigInt(ticketPrice),
           account: walletAddress,
         });
-
-        // Set transaction hash in state
-        setTransactionHash(hash);
 
         // Store transaction hash in localStorage as immediate solution
         localStorage.setItem(`event_${event.id}_user_${walletAddress}_ticket_tx`, hash);
@@ -482,7 +339,7 @@ const EventDetails: React.FC = () => {
         // Create ticket metadata for Pinata
         const ticketMetadata = {
           eventId: event.id,
-          eventTitle: event.title,
+          eventTitle: event.details.title,
           purchaseDate: new Date().toISOString(),
           userAddress: walletAddress,
           ticketType: selectedTicketType,
@@ -498,7 +355,7 @@ const EventDetails: React.FC = () => {
 
         const metadataFile = new File(
           [metadataBlob],
-          `event-${event.id}-user-${walletAddress.slice(0, 6)}-ticket.json`,
+          `event-${event.id}-user-${walletAddress.slice(0, 8)}-ticket.json`,
         );
 
         // Upload metadata to Pinata (non-blocking)
@@ -525,6 +382,9 @@ const EventDetails: React.FC = () => {
 
         if (receipt.status === 'success') {
           alert('Ticket purchased successfully!');
+
+          // Set transaction receipt in state
+          setTransactionHash(hash);
           // Refresh event details
           await loadEventDetails();
           // Update balance
@@ -532,17 +392,25 @@ const EventDetails: React.FC = () => {
         } else {
           throw new Error('Transaction failed');
         }
-      } catch (txError: any) {
-        // Check if user rejected the transaction in their wallet
+      } catch (error: unknown) {
+        // Type guard to check if error is an object with a message property
         if (
-          txError.message?.includes('rejected') ||
-          txError.message?.includes('denied') ||
-          txError.message?.includes('cancelled')
+          error &&
+          typeof error === 'object' &&
+          'message' in error &&
+          typeof error.message === 'string'
         ) {
-          throw new Error('Transaction was rejected in wallet');
-        } else {
-          throw txError; // rethrow other errors
+          // Now TypeScript knows that error.message exists and is a string
+          if (
+            error.message.includes('rejected') ||
+            error.message.includes('denied') ||
+            error.message.includes('cancelled')
+          ) {
+            throw new Error('Transaction was rejected in wallet');
+          }
         }
+        // Rethrow the original error regardless of type
+        throw error;
       }
     } catch (error: any) {
       setPurchaseError(`Failed to purchase ticket: ${error.message || 'Unknown error'}`);
@@ -556,8 +424,6 @@ const EventDetails: React.FC = () => {
     if (!event || !wallets || !wallets[0]?.address) return;
 
     try {
-      const walletAddress = wallets[0].address as `0x${string}`;
-
       // First check localStorage for the transaction hash (fastest method)
       const storedHash = localStorage.getItem(`event_${event.id}_user_${walletAddress}_ticket_tx`);
 
@@ -621,10 +487,9 @@ const EventDetails: React.FC = () => {
     return <NoEventState navigate={navigate} />;
   }
 
-  // TicketTypeSelector Component
-  const TicketTypeSelector: React.FC = () => {
+  const TicketTypeSelector = () => {
     // Determine what options should be available
-    const isPaidEvent = event && Number(event.ticketType) === EventType.PAID;
+    const isPaidEvent = event && Number(event.details.ticketType) === TicketType.PAID;
     const hasRegularOption = isPaidEvent && event.ticketsData?.hasRegularTicket;
     const hasVipOption = isPaidEvent && event.ticketsData?.hasVIPTicket;
 
@@ -665,12 +530,12 @@ const EventDetails: React.FC = () => {
             <>
               {hasRegularOption && (
                 <option value="REGULAR">
-                  REGULAR - {formatEther(event.ticketsData?.regularTicketFee || 0n)} ETN
+                  REGULAR - {formatEther(BigInt(event.ticketsData.regularTicketFee))} ETN
                 </option>
               )}
               {hasVipOption && (
                 <option value="VIP">
-                  VIP - {formatEther(event.ticketsData?.vipTicketFee || 0n)} ETN
+                  VIP - {formatEther(BigInt(event.ticketsData.vipTicketFee))} ETN
                 </option>
               )}
               {!hasRegularOption && !hasVipOption && (
@@ -687,7 +552,7 @@ const EventDetails: React.FC = () => {
   };
 
   // Wallet info component
-  const WalletInfo: React.FC = () => (
+  const WalletInfo = () => (
     <div className="space-y-2">
       <p className="font-inter text-medium text-white">
         Wallet:{' '}
@@ -702,10 +567,10 @@ const EventDetails: React.FC = () => {
   );
 
   // The TicketOwnedSection component to display the transaction hash
-  const TicketOwnedSection: React.FC = () => {
+  const TicketOwnedSection = () => {
     const ticketRef = useRef<HTMLDivElement>(null);
-    const [userTicketType, setUserTicketType] = useState<string>('');
-    const [isLoadingTicketType, setIsLoadingTicketType] = useState<boolean>(true);
+    const [userTicketType, setUserTicketType] = useState('');
+    const [isLoadingTicketType, setIsLoadingTicketType] = useState(true);
 
     // Fetch the user's actual ticket type when component mounts
     useEffect(() => {
@@ -714,33 +579,31 @@ const EventDetails: React.FC = () => {
 
         setIsLoadingTicketType(true);
         try {
-          const walletAddress = wallets[0].address as `0x${string}`;
-
           // Get event tickets data
           const eventTicketsData = (await publicClient.readContract({
             address: TICKET_CITY_ADDR,
             abi: TICKET_CITY_ABI,
             functionName: 'eventTickets',
             args: [event.id],
-          })) as any[];
+          })) as [boolean, boolean, number, number, string];
 
-          // Format ticket data
+          // Format ticket data with explicit types
           const ticketsData = {
             hasRegularTicket: eventTicketsData[0],
             hasVIPTicket: eventTicketsData[1],
             regularTicketFee: eventTicketsData[2],
             vipTicketFee: eventTicketsData[3],
-            regularTicketNFT: eventTicketsData[3] as `0x${string}`, // Regular ticket NFT address
-            vipTicketNFT: eventTicketsData[4] as `0x${string}`, // VIP ticket NFT address
+            regularTicketNFT: String(eventTicketsData[3]), // Convert to string
+            vipTicketNFT: String(eventTicketsData[4]), // Convert to string
           };
 
           // Check if user has registered for the event
-          const hasRegistered = (await publicClient.readContract({
+          const hasRegistered = await publicClient.readContract({
             address: TICKET_CITY_ADDR,
             abi: TICKET_CITY_ABI,
             functionName: 'hasRegistered',
             args: [walletAddress, event.id],
-          })) as boolean;
+          });
 
           if (!hasRegistered) {
             setUserTicketType('Not Registered');
@@ -748,16 +611,44 @@ const EventDetails: React.FC = () => {
           }
 
           // For FREE events
-          if (Number(event.ticketType) === EventType.FREE) {
+          if (Number(event.details.ticketType) === TicketType.FREE) {
             setUserTicketType('FREE');
             return;
           }
 
+          // Properly handle the NFT addresses and ensure they're valid Ethereum addresses
+          let vipTicketNFT: `0x${string}` | undefined;
+          let regularTicketNFT: `0x${string}` | undefined;
+
+          // Check if vipTicketNFT is a valid value and format it correctly
+          if (
+            ticketsData.vipTicketNFT &&
+            ticketsData.vipTicketNFT !== 'undefined' &&
+            ticketsData.vipTicketNFT !== '0'
+          ) {
+            const addressValue = ticketsData.vipTicketNFT.toString();
+            vipTicketNFT = (
+              addressValue.startsWith('0x') ? addressValue : `0x${addressValue}`
+            ) as `0x${string}`;
+          }
+
+          // Check if regularTicketNFT is a valid value and format it correctly
+          if (
+            ticketsData.regularTicketNFT &&
+            ticketsData.regularTicketNFT !== 'undefined' &&
+            ticketsData.regularTicketNFT !== '0'
+          ) {
+            const addressValue = ticketsData.regularTicketNFT.toString();
+            regularTicketNFT = (
+              addressValue.startsWith('0x') ? addressValue : `0x${addressValue}`
+            ) as `0x${string}`;
+          }
+
           // For PAID events - Check VIP first
-          if (ticketsData.hasVIPTicket && ticketsData.vipTicketNFT) {
+          if (ticketsData.hasVIPTicket && vipTicketNFT) {
             try {
-              const vipBalance = (await publicClient.readContract({
-                address: ticketsData.vipTicketNFT,
+              const vipBalance = await publicClient.readContract({
+                address: vipTicketNFT,
                 abi: [
                   {
                     inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
@@ -769,9 +660,9 @@ const EventDetails: React.FC = () => {
                 ],
                 functionName: 'balanceOf',
                 args: [walletAddress],
-              })) as bigint;
+              });
 
-              if (vipBalance > 0n) {
+              if (vipBalance > 0) {
                 setUserTicketType('VIP');
                 return;
               }
@@ -781,10 +672,10 @@ const EventDetails: React.FC = () => {
           }
 
           // Then check REGULAR
-          if (ticketsData.hasRegularTicket && ticketsData.regularTicketNFT) {
+          if (ticketsData.hasRegularTicket && regularTicketNFT) {
             try {
-              const regularBalance = (await publicClient.readContract({
-                address: ticketsData.regularTicketNFT,
+              const regularBalance = await publicClient.readContract({
+                address: regularTicketNFT,
                 abi: [
                   {
                     inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
@@ -796,9 +687,9 @@ const EventDetails: React.FC = () => {
                 ],
                 functionName: 'balanceOf',
                 args: [walletAddress],
-              })) as bigint;
+              });
 
-              if (regularBalance > 0n) {
+              if (regularBalance > 0) {
                 setUserTicketType('REGULAR');
                 return;
               }
@@ -812,25 +703,21 @@ const EventDetails: React.FC = () => {
         } catch (error) {
           console.error('Error fetching user ticket type:', error);
           // If user is registered but we can't determine type, default to REGULAR
-          if (wallets && wallets[0]?.address) {
-            const walletAddress = wallets[0].address as `0x${string}`;
-            try {
-              const hasRegistered = (await publicClient.readContract({
-                address: TICKET_CITY_ADDR,
-                abi: TICKET_CITY_ABI,
-                functionName: 'hasRegistered',
-                args: [walletAddress, event.id],
-              })) as boolean;
+          try {
+            const isRegistered = await publicClient.readContract({
+              address: TICKET_CITY_ADDR,
+              abi: TICKET_CITY_ABI,
+              functionName: 'hasRegistered',
+              args: [walletAddress, event.id],
+            });
 
-              if (hasRegistered) {
-                setUserTicketType('REGULAR');
-              } else {
-                setUserTicketType('UNKNOWN');
-              }
-            } catch {
+            if (isRegistered) {
+              setUserTicketType('REGULAR');
+            } else {
               setUserTicketType('UNKNOWN');
             }
-          } else {
+          } catch (innerError) {
+            console.error('Error checking registration status:', innerError);
             setUserTicketType('UNKNOWN');
           }
         } finally {
@@ -850,32 +737,35 @@ const EventDetails: React.FC = () => {
 
         // Add a small delay to ensure the component is fully rendered
         setTimeout(() => {
-          htmlToImage
-            .toPng(ticketRef.current!, {
-              quality: 2.0,
-              backgroundColor: '#0F0B18',
-              width: ticketRef.current!.offsetWidth,
-              height: ticketRef.current!.offsetHeight,
-              cacheBust: true,
-              // Improve image quality
-              pixelRatio: 2,
-            })
-            .then((dataUrl) => {
-              const link = document.createElement('a');
-              link.download = `${event.title}-Ticket.png`;
-              link.href = dataUrl;
-              link.click();
-            })
-            .catch((error) => {
-              console.error('Error generating ticket image:', error);
-              alert('Failed to download ticket. Please try again.');
-            });
+          if (ticketRef.current) {
+            htmlToImage
+              .toPng(ticketRef.current, {
+                quality: 2.0,
+                backgroundColor: '#0F0B18',
+                width: ticketRef.current.offsetWidth,
+                height: ticketRef.current.offsetHeight,
+                cacheBust: true,
+                // Improve image quality
+                pixelRatio: 2,
+              })
+              .then((dataUrl) => {
+                const link = document.createElement('a');
+                link.download = `${event.details.title}-Ticket.png`;
+                link.href = dataUrl;
+                link.click();
+              })
+              .catch((error) => {
+                console.error('Error generating ticket image:', error);
+                alert('Failed to download ticket. Please try again.');
+              });
+          }
         }, 100); // 100ms delay
       });
     };
 
     return (
       <div className="max-w-3xl mx-auto rounded-2xl border border-[#8A20FF] p-6 bg-[#6A00F4] shadow-lg overflow-hidden">
+        {/* Rest of the component remains the same */}
         {/* Ticket Header */}
         <div className="text-center mb-4 border-b border-dotted border-purple-300 pb-3">
           <div className="flex items-center justify-center mb-2">
@@ -886,27 +776,31 @@ const EventDetails: React.FC = () => {
 
         {/* Ticket Content */}
         <div ref={ticketRef} className="bg-[#0F0B18] rounded-xl p-6 mb-4">
-          <h3 className="font-poppins text-xl text-white mb-4 text-center">{event.title}</h3>
+          <h3 className="font-poppins text-xl text-white mb-4 text-center">
+            {event.details.title}
+          </h3>
 
           <div className="space-y-3 mb-6">
             <div className="flex justify-between">
               <span className="text-gray-300 text-sm">Date:</span>
-              <span className="text-white text-sm">{formatDate(event.startDate)}</span>
+              <span className="text-white text-sm">{formatDate(event.details.startDate)}</span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-gray-300 text-sm">Location:</span>
-              <span className="text-white text-sm">{event.location || 'Virtual Event'}</span>
+              <span className="text-white text-sm">
+                {event.details.location || 'Virtual Event'}
+              </span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-gray-300 text-sm">Time:</span>
-              <span className="text-white text-sm">{formatTime(event.startDate)}</span>
+              <span className="text-white text-sm">{formatTime(event.details.startDate)}</span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-gray-300 text-sm">Seat No:</span>
-              <span className="text-white text-sm">A{event.userRegCount}</span>
+              <span className="text-white text-sm">A{event.details.userRegCount}</span>
             </div>
 
             <div className="flex justify-between">
@@ -922,13 +816,13 @@ const EventDetails: React.FC = () => {
             <div className="flex justify-between">
               <span className="text-gray-300 text-sm">Price:</span>
               <span className="text-white text-sm">
-                {event.ticketType === EventType.FREE
+                {Number(event.details.ticketType) === TicketType.FREE
                   ? 'FREE'
                   : userTicketType === 'VIP' && event.ticketsData?.vipTicketFee
-                    ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
-                    : userTicketType === 'REGULAR' && event.ticketsData?.regularTicketFee
-                      ? `${formatEther(event.ticketsData.regularTicketFee)} ETN`
-                      : 'N/A'}
+                  ? `${formatEther(BigInt(event.ticketsData.vipTicketFee))} ETN`
+                  : userTicketType === 'REGULAR' && event.ticketsData?.regularTicketFee
+                  ? `${formatEther(BigInt(event.ticketsData.regularTicketFee))} ETN`
+                  : 'N/A'}
               </span>
             </div>
 
@@ -936,7 +830,7 @@ const EventDetails: React.FC = () => {
               <span className="text-gray-300 text-sm">Transaction ID:</span>
               <span className="text-white text-sm truncate">
                 {wallets?.[0]?.address
-                  ? `${wallets[0].address.slice(0, 6)}...${wallets[0].address.slice(-4)}`
+                  ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
                   : '0x...0000'}
               </span>
             </div>
@@ -991,9 +885,11 @@ const EventDetails: React.FC = () => {
         <div className="mt-6 text-sm text-purple-200">
           <p className="mb-2">
             <span className="font-semibold">Ticket NFT Address:</span>{' '}
-            {event.ticketNFTAddr &&
-            event.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
-              ? `${event.ticketNFTAddr.slice(0, 6)}...${event.ticketNFTAddr.slice(-4)}`
+            {event.details.ticketNFTAddr &&
+            event.details.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+              ? `${event.details.ticketNFTAddr.slice(0, 6)}...${event.details.ticketNFTAddr.slice(
+                  -4,
+                )}`
               : 'Not available'}
           </p>
           <p>
@@ -1007,7 +903,7 @@ const EventDetails: React.FC = () => {
               <p className="mb-1 font-semibold">Transaction Details:</p>
               <p className="break-all text-xs">Hash: {transactionHash}</p>
               <a
-                href={`https://sepolia.basescan.org/tx/${transactionHash}`}
+                href={`https://blockexplorer.electroneum.com/tx/${transactionHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-yellow-300 hover:text-yellow-400 text-xs inline-block mt-1"
@@ -1022,7 +918,7 @@ const EventDetails: React.FC = () => {
   };
 
   // Purchase ticket section component
-  const PurchaseTicketSection: React.FC = () => (
+  const PurchaseTicketSection = () => (
     <div className="rounded-lg border border-borderStroke p-6">
       <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
         🎟️ {authenticated ? 'Get Your Ticket' : 'Ticket Information'}
@@ -1066,7 +962,7 @@ const EventDetails: React.FC = () => {
   );
 
   // No tickets available component
-  const NoTicketsSection: React.FC = () => (
+  const NoTicketsSection = () => (
     <div className="rounded-lg border border-borderStroke p-6">
       <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
         🎟️ Tickets
@@ -1092,18 +988,18 @@ const EventDetails: React.FC = () => {
         {/* Event Header */}
         <div className="text-center mb-8">
           <h1 className="font-exo text-xlarge tracking-tightest text-white mb-4">
-            {event.title || 'Blockchain Summit'} {hasTicket && '🎫'}
+            {event.details.title || 'Blockchain Summit'} {hasTicket && '🎫'}
           </h1>
           <div className="flex items-center justify-center gap-2 mb-2">
             <MapPin className="w-5 h-5 text-white" />
             <span className="font-inter text-medium text-white">
-              {event.location || 'Virtual (CrossFi Metaverse)'}
+              {event.details.location || 'Virtual (CrossFi Metaverse)'}
             </span>
           </div>
           <p className="gradient-text font-inter text-medium">
-            {new Date() < new Date(Number(event.startDate) * 1000)
+            {new Date() < new Date(Number(event.details.startDate) * 1000)
               ? (() => {
-                  const timeRemaining = Number(event.startDate) * 1000 - Date.now();
+                  const timeRemaining = Number(event.details.startDate) * 1000 - Date.now();
                   const days = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
                   const hours = Math.floor(
                     (timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
@@ -1121,20 +1017,20 @@ const EventDetails: React.FC = () => {
                     return `Event starts in: ${seconds} second${seconds !== 1 ? 's' : ''}`;
                   }
                 })()
-              : new Date() < new Date(Number(event.endDate) * 1000)
-                ? 'Event is live now!'
-                : 'Event has ended'}
+              : new Date() < new Date(Number(event.details.endDate) * 1000)
+              ? 'Event is live now!'
+              : 'Event has ended'}
           </p>
         </div>
 
         {/* Banner Image */}
         <div className="w-full rounded-lg overflow-hidden mb-8">
-          {event.imageUri ? (
+          {event.details.imageUri ? (
             <img
-              src={event.imageUri}
+              src={event.details.imageUri}
               alt="Event Banner"
               className="w-full h-64 object-cover"
-              onError={(e) => {
+              onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
                 const target = e.target as HTMLImageElement;
                 target.onerror = null;
                 target.src = '/placeholder-image.jpg';
@@ -1154,41 +1050,44 @@ const EventDetails: React.FC = () => {
           <div className="rounded-lg border border-borderStroke p-6">
             <h2 className="font-poppins text-large text-white mb-4">
               👥 Hosted by:{' '}
-              {event.organiser
-                ? `${event.organiser.slice(0, 6)}...${event.organiser.slice(-4)}`
+              {event.details.organiser
+                ? `${event.details.organiser.slice(0, 6)}...${event.details.organiser.slice(-4)}`
                 : 'Unknown'}
             </h2>
             <p className="font-inter text-medium text-white mb-4">
-              {event.desc ||
+              {event.details.desc ||
                 'Join top Web3 developers and entrepreneurs as we explore the future of decentralized technology.'}
             </p>
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-white" />
                 <span className="font-inter text-medium text-white">
-                  Date: {formatDate(event.startDate)} to {formatDate(event.endDate)}
+                  Date: {formatDate(event.details.startDate)} to {formatDate(event.details.endDate)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-white" />
                 <span className="font-inter text-medium text-white">
-                  Time: {formatTime(event.startDate)} to {formatTime(event.endDate)}
+                  Time: {formatTime(event.details.startDate)} to {formatTime(event.details.endDate)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Link className="w-5 h-5 text-white" />
                 <span className="font-inter text-medium text-white">
                   Ticket NFT:{' '}
-                  {event.ticketNFTAddr &&
-                  event.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
-                    ? `${event.ticketNFTAddr.slice(0, 6)}...${event.ticketNFTAddr.slice(-4)}`
+                  {event.details.ticketNFTAddr &&
+                  event.details.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+                    ? `${event.details.ticketNFTAddr.slice(
+                        0,
+                        6,
+                      )}...${event.details.ticketNFTAddr.slice(-4)}`
                     : 'Not created yet'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-white" />
                 <span className="font-inter text-medium text-white">
-                  Capacity: {event.expectedAttendees?.toString() || '5000'} Attendees
+                  Capacity: {event.details.expectedAttendees?.toString() || '5000'} Attendees
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1206,9 +1105,9 @@ const EventDetails: React.FC = () => {
               /* ORGANIZER VIEW */
               <>
                 {/* Ticket Creation Section for Organizer */}
-                {(Number(event.ticketType) === EventType.FREE && !ticketCreated) ||
-                (Number(event.ticketType) === EventType.PAID &&
-                  (!event.ticketsData?.hasRegularTicket || !event.ticketsData?.hasVIPTicket)) ? (
+                {(Number(event.details.ticketType) === TicketType.FREE && !ticketCreated) ||
+                (Number(event.details.ticketType) === TicketType.PAID &&
+                  (!event.ticketsData.hasRegularTicket || !event.ticketsData.hasVIPTicket)) ? (
                   <TicketCreationSection
                     event={adaptEventForTicketCreation(event)}
                     fetchEventDetails={loadEventDetails}
