@@ -111,9 +111,9 @@ const EventsSection: React.FC = () => {
       );
 
       // Step 3: Fetch ticket details for each event
-      const formattedEvents = await Promise.all(
+      const formattedEvents: Event[] = await Promise.all(
         eventsData
-          .filter((event) => event !== null)
+          .filter((event): event is { eventId: any; eventData: any } => event !== null)
           .map(async ({ eventId, eventData }) => {
             // Check if event has ended
             const hasEnded = Number((eventData as any).endDate) * 1000 < Date.now();
@@ -191,7 +191,8 @@ const EventsSection: React.FC = () => {
               Number((eventData as any).expectedAttendees) -
               Number((eventData as any).userRegCount);
 
-            return {
+            // Create proper Event object with typed rawData
+            const event: Event = {
               id: eventId.toString(),
               type: getTicketType(eventData),
               title: (eventData as any).title || 'Untitled Event',
@@ -212,19 +213,25 @@ const EventsSection: React.FC = () => {
               },
               remainingTickets: remainingTickets,
               hasEnded: hasEnded,
-              hasTicketCreated: hasTicketCreated, // Added flag to track if tickets are created
+              hasTicketCreated: hasTicketCreated,
               hasRegularTicket: hasRegularTicket,
               hasVIPTicket: hasVIPTicket,
-              isVerified: false, // Add the missing isVerified property
-              rawData: eventData, // Keep raw data for debugging
+              isVerified: false,
+              rawData: {
+                ...eventData,
+                startDate: (eventData as any).startDate,
+                endDate: (eventData as any).endDate,
+              },
             };
+
+            return event;
           }),
       );
 
       console.log('Formatted events:', formattedEvents);
 
       // Filter out events that have ended AND ensure at least one ticket is available
-      const activeEvents = formattedEvents.filter(
+      const activeEvents: Event[] = formattedEvents.filter(
         (event) => !event.hasEnded && event.hasTicketCreated,
       );
 
