@@ -77,15 +77,43 @@ const CreateEventFormComponent = () => {
       <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-button-inset p-8">
         <h1 className="text-white text-2xl font-bold mb-8 text-center">Create New Event</h1>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            required
-            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
-            placeholder="Event Title"
-          />
+          <div>
+            <label className="block text-white mb-2">Event Name</label>
+            <input
+              type="text"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              required
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+              placeholder="Event Title"
+            />
+          </div>
+
+          <div>
+            <label className="block text-white mb-2">Event Description</label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              required
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white min-h-[100px]"
+              placeholder="Description"
+            />
+          </div>
+
+          <div>
+            <label className="block text-white mb-2">Location</label>
+            <input
+              type="text"
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              required
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+              placeholder="Location"
+            />
+          </div>
 
           <div>
             <label className="block text-white mb-2">Start Date & Time</label>
@@ -111,47 +139,34 @@ const CreateEventFormComponent = () => {
             />
           </div>
 
-          <input
-            type="text"
-            name="location"
-            value={formData.location}
-            onChange={handleChange}
-            required
-            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
-            placeholder="Location"
-          />
+          <div>
+            <label className="block text-white mb-2">Attendees Capacity</label>
+            <input
+              type="number"
+              name="capacity"
+              value={formData.capacity}
+              onChange={handleChange}
+              required
+              min="1"
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+              placeholder="Capacity"
+            />
+          </div>
 
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            required
-            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white min-h-[100px]"
-            placeholder="Description"
-          />
-
-          <input
-            type="file"
-            name="image"
-            onChange={handleChange}
-            accept="image/*"
-            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
-            required={!formData.image}
-          />
-          {formData.image && (
-            <p className="text-white text-sm">Image selected: {formData.image.name}</p>
-          )}
-
-          <input
-            type="number"
-            name="capacity"
-            value={formData.capacity}
-            onChange={handleChange}
-            required
-            min="1"
-            className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
-            placeholder="Capacity"
-          />
+          <div>
+            <label className="block text-white mb-2">Event Banner</label>
+            <input
+              type="file"
+              name="image"
+              onChange={handleChange}
+              accept="image/*"
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+              required={!formData.image}
+            />
+            {formData.image && (
+              <p className="text-white text-sm">Image selected: {formData.image.name}</p>
+            )}
+          </div>
 
           <div>
             <label className="block text-white mb-2">Event Type</label>
@@ -161,8 +176,12 @@ const CreateEventFormComponent = () => {
               onChange={handleChange}
               className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
             >
-              <option value="FREE">FREE</option>
-              <option value="PAID">PAID</option>
+              <option value="FREE" className="bg-black">
+                FREE
+              </option>
+              <option value="PAID" className="bg-black">
+                PAID
+              </option>
             </select>
           </div>
 

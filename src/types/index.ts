@@ -11,8 +11,8 @@ export type ViewMode = 'grid' | 'list';
 
 export type EventFilter = 'Regular' | 'All' | 'Free' | 'Paid' | 'VIP' | 'Virtual' | 'In-Person';
 
-// Update the Event interface in TicketCreationSection to match what's being passed from EventDetails
-interface TicketCreationEvent {
+// Interface for TicketCreationSection component
+export interface TicketCreationEvent {
   id: number | string; // Accept both number and string to handle different sources
   ticketType: number;
   ticketNFTAddr: `0x${string}` | string; // Accept both Ethereum address format and regular string
@@ -23,14 +23,6 @@ interface TicketCreationEvent {
     vipTicketFee: bigint | string; // Accept both bigint and string to handle different sources
   };
 }
-
-// Update the props interface to use the new TicketCreationEvent type
-// interface TicketCreationSectionProps {
-//   event: TicketCreationEvent;
-//   fetchEventDetails: (showLoading?: boolean) => Promise<void>;
-//   isLoading: boolean;
-//   setIsLoading: (loading: boolean) => void;
-// }
 
 export interface EventTicketsData {
   hasRegularTicket: boolean;
@@ -97,7 +89,6 @@ export interface TicketCreationSectionProps {
 }
 
 // This is your existing Event interface for the UI components
-
 export interface Event {
   id: string;
   type: string;
@@ -123,11 +114,14 @@ export interface Event {
   hasTicketCreated: boolean;
   hasRegularTicket: boolean;
   hasVIPTicket: boolean;
+  // Accept either a structured object or the original EventData
   rawData: {
-    startDate?: string;
-    endDate?: string;
+    startDate?: string | bigint;
+    endDate?: string | bigint;
     [key: string]: any;
   };
+  // Optional property that might be needed for hasNotStarted check
+  hasNotStarted?: boolean;
 }
 
 // Helper type for converting between contract data and UI data
@@ -141,6 +135,22 @@ export function convertEventDataToEvent(
   options: EventConversionOptions = {},
 ): Event {
   const { includeRawData = true } = options;
+
+  const now = Math.floor(Date.now() / 1000);
+  const startTime = Number(eventData.startDate);
+  const endTime = Number(eventData.endDate);
+  console.log(endTime);
+
+  // Format rawData to match expected structure
+  const formattedRawData = {
+    startDate: eventData.startDate.toString(),
+    endDate: eventData.endDate.toString(),
+    // Include other properties from eventData that might be needed
+    organiser: eventData.organiser,
+    ticketType: eventData.ticketType,
+    ticketNFTAddr: eventData.ticketNFTAddr,
+    // Add more as needed
+  };
 
   return {
     id: eventData.id.toString(),
@@ -165,6 +175,7 @@ export function convertEventDataToEvent(
     },
     remainingTickets: eventData.expectedAttendees - eventData.userRegCount,
     hasEnded: Date.now() > Number(eventData.endDate) * 1000,
+    hasNotStarted: now < startTime,
     isVerified: true, // Assuming events from contract are verified
     hasTicketCreated: Boolean(
       eventData.ticketNFTAddr &&
@@ -172,7 +183,7 @@ export function convertEventDataToEvent(
     ),
     hasRegularTicket: Boolean(eventData.ticketsData?.hasRegularTicket),
     hasVIPTicket: Boolean(eventData.ticketsData?.hasVIPTicket),
-    rawData: includeRawData ? eventData : undefined,
+    rawData: includeRawData ? formattedRawData : {},
   };
 }
 
@@ -195,4 +206,21 @@ export type FormatEther = (wei: bigint) => string;
 // Note: This is only a fallback - use the viem imported function when possible
 export function formatEther(wei: bigint): string {
   return (Number(wei) / 1e18).toString();
+}
+
+// Helper function to adapt EventData for TicketCreationSection
+export function adaptEventForTicketCreation(eventData: EventData): TicketCreationEvent {
+  return {
+    id: eventData.id,
+    ticketType: eventData.ticketType,
+    ticketNFTAddr: eventData.ticketNFTAddr,
+    ticketsData: eventData.ticketsData
+      ? {
+          hasRegularTicket: eventData.ticketsData.hasRegularTicket,
+          hasVIPTicket: eventData.ticketsData.hasVIPTicket,
+          regularTicketFee: eventData.ticketsData.regularTicketFee,
+          vipTicketFee: eventData.ticketsData.vipTicketFee,
+        }
+      : undefined,
+  };
 }
