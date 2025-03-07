@@ -24,8 +24,13 @@ const navLinks = [
   { icon: <Users />, label: 'Organizers Hub', path: '/organizers' },
   { icon: <Settings />, label: 'Settings', path: '/settings' },
 ];
+interface SidebarProps {
+  onNavigate: (path: string) => void;
+  currentPath: string;
+  // Add your existing props here
+}
 
-const Sidebar: React.FC = () => {
+const Sidebar: React.FC<SidebarProps> = () => {
   const { user } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
