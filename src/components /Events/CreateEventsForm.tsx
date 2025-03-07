@@ -25,21 +25,70 @@ const initialFormState: EventFormData = {
   ticketType: 'NONE',
 };
 
-const CreateEventFormComponent = () => {
+// Props interface to handle callback functions
+interface CreateEventFormComponentProps {
+  onContinue?: (formData: EventFormData) => Promise<void> | void;
+}
+
+const CreateEventFormComponent: React.FC<CreateEventFormComponentProps> = ({ onContinue }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const existingData = location.state as EventFormData | null;
 
-  const [formData, setFormData] = useState<EventFormData>(existingData || { ...initialFormState });
-
-  // Reset form when navigating back from successful event creation
-  useEffect(() => {
-    // Check if we're coming back to the form without any state
-    // This indicates we need to reset the form (e.g., after successful creation)
-    if (location.state === null && location.key !== 'default') {
-      setFormData({ ...initialFormState });
+  const [formData, setFormData] = useState<EventFormData>(() => {
+    // Check if we have existing data from location state first
+    if (existingData) {
+      return existingData;
     }
-  }, [location]);
+
+    // Check for stored form data
+    const storedDataString = localStorage.getItem('eventFormData');
+    if (storedDataString) {
+      try {
+        const storedData = JSON.parse(storedDataString);
+        // Only use stored data if we should NOT clear the form
+        if (localStorage.getItem('clearEventForm') !== 'true') {
+          return storedData;
+        }
+      } catch (e) {
+        console.error('Error parsing stored form data:', e);
+      }
+    }
+
+    // Clear the flag if it was set
+    localStorage.removeItem('clearEventForm');
+
+    // Return initial state if nothing else worked
+    return { ...initialFormState };
+  });
+
+  // Save form data to localStorage whenever it changes
+  useEffect(() => {
+    // Only save if we're not trying to clear the form
+    if (formData && localStorage.getItem('clearEventForm') !== 'true') {
+      // We need to handle the File object specially since it can't be serialized
+      const storableData = {
+        ...formData,
+        // Don't include image in what we store in localStorage
+        image: null,
+      };
+      localStorage.setItem('eventFormData', JSON.stringify(storableData));
+    }
+  }, [formData]);
+
+  // Handle form clearing when needed
+  useEffect(() => {
+    if (localStorage.getItem('clearEventForm') === 'true') {
+      localStorage.removeItem('clearEventForm');
+      localStorage.removeItem('eventFormData');
+      localStorage.removeItem('hasEventImage');
+
+      // Only reset if we're not coming from the preview with edited data
+      if (!existingData) {
+        setFormData({ ...initialFormState });
+      }
+    }
+  }, [existingData]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
@@ -67,9 +116,21 @@ const CreateEventFormComponent = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/event-preview', { state: formData });
+
+    // Validate that we have an image
+    if (!formData.image) {
+      alert('Please select an image for your event');
+      return;
+    }
+
+    if (onContinue) {
+      await onContinue(formData);
+    } else {
+      // Navigate to preview with the form data
+      navigate('/event-preview', { state: formData });
+    }
   };
 
   return (
@@ -123,7 +184,7 @@ const CreateEventFormComponent = () => {
               value={formData.startDateTime}
               onChange={handleChange}
               required
-              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:saturate-0 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:sepia [&::-webkit-calendar-picker-indicator]:hue-rotate-[1000deg]"
             />
           </div>
 
@@ -135,7 +196,7 @@ const CreateEventFormComponent = () => {
               value={formData.endDateTime}
               onChange={handleChange}
               required
-              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white"
+              className="w-full bg-transparent border border-borderStroke rounded-lg p-3 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:saturate-0 [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:sepia [&::-webkit-calendar-picker-indicator]:hue-rotate-[1000deg]"
             />
           </div>
 

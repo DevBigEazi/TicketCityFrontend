@@ -65,7 +65,6 @@ const extractEventIdFromReceipt = (receipt: any): string | null => {
  */
 export const EventPreviewComponent: React.FC<EventPreviewComponentProps> = ({
   eventData,
-  //onBack,
   onPublish,
   onEdit,
 }) => {
@@ -73,12 +72,20 @@ export const EventPreviewComponent: React.FC<EventPreviewComponentProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletConnected, setWalletConnected] = useState<boolean>(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   // Check wallet connection status
   useEffect(() => {
     const wallet = wallets?.[0];
     setWalletConnected(!!wallet);
   }, [wallets]);
+
+  // Set up image URL from event data if available
+  useEffect(() => {
+    if (eventData.image && eventData.image instanceof File) {
+      setImageUrl(URL.createObjectURL(eventData.image));
+    }
+  }, [eventData.image]);
 
   const validateDates = (startDate: string, endDate: string) => {
     const start = new Date(startDate);
@@ -225,6 +232,9 @@ export const EventPreviewComponent: React.FC<EventPreviewComponentProps> = ({
         ipfsUrl,
       };
 
+      // Clear the form data after successful creation
+      localStorage.setItem('clearEventForm', 'true');
+
       // Call the onPublish prop
       onPublish(publishData);
     } catch (error: any) {
@@ -269,12 +279,12 @@ export const EventPreviewComponent: React.FC<EventPreviewComponentProps> = ({
 
         {/* Event Details */}
         <div className="border border-borderStroke p-6 rounded-lg bg-searchBg">
-          {eventData.image && (
-            <img
-              src={URL.createObjectURL(eventData.image)}
-              alt="Event"
-              className="w-full h-64 object-cover rounded-lg mb-4"
-            />
+          {imageUrl ? (
+            <img src={imageUrl} alt="Event" className="w-full h-64 object-cover rounded-lg mb-4" />
+          ) : (
+            <div className="w-full h-64 bg-gray-700 flex items-center justify-center rounded-lg mb-4">
+              <p className="text-white text-lg">No image available</p>
+            </div>
           )}
           <h2 className="text-white text-xl font-semibold">{eventData.title}</h2>
           <p className="text-white">
@@ -332,8 +342,7 @@ const EventPreview = () => {
   const navigate = useNavigate();
   const [eventData, setEventData] = useState<EventFormData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  console.log('error :', error);
-
+  console.log(error);
   // Get event data from location state
   useEffect(() => {
     const data = location.state as EventFormData | null;
