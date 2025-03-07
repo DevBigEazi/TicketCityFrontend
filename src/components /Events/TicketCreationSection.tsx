@@ -21,22 +21,22 @@ const PaidTicketCategory = {
   VIP: 2,
 };
 
-// ticket creation component
-interface Event {
-  id: string;
+// Updated Event interface to be more flexible
+interface TicketCreationEvent {
+  id: number | string; // Accept both number and string to handle different sources
   ticketType: number;
-  ticketNFTAddr: string;
+  ticketNFTAddr: `0x${string}` | string; // Accept both Ethereum address format and regular string
   ticketsData: {
     hasRegularTicket: boolean;
     hasVIPTicket: boolean;
-    regularTicketFee: string;
-    vipTicketFee: string;
+    regularTicketFee: bigint | string; // Accept both bigint and string to handle different sources
+    vipTicketFee: bigint | string; // Accept both bigint and string to handle different sources
   };
 }
 
 interface TicketCreationSectionProps {
-  event: Event;
-  fetchEventDetails: () => Promise<void>;
+  event: TicketCreationEvent;
+  fetchEventDetails: (showLoading?: boolean) => Promise<void>;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
 }
@@ -49,6 +49,22 @@ const TicketCreationSection = ({
 }: TicketCreationSectionProps) => {
   const { wallets } = useWallets();
   const publicClient = createPublicClientInstance();
+
+  // Helper function to convert string/bigint to formatted string
+  const safeFormatEther = (value: string | bigint): string => {
+    // If it's already a string, parse it to make sure it's a valid number
+    if (typeof value === 'string') {
+      try {
+        // Try to parse it as BigInt first (for "0x..." hex strings)
+        return formatEther(BigInt(value));
+      } catch {
+        // If that fails, try to parse it as a regular number
+        return value;
+      }
+    }
+    // If it's a bigint, format it directly
+    return formatEther(value);
+  };
 
   // State for managing ticket creation
   const [ticketState, setTicketState] = useState<TicketState>({
@@ -73,8 +89,6 @@ const TicketCreationSection = ({
     error: null,
     currentType: null,
   });
-
-  //
 
   // Handle ticket type and price changes
   interface TicketState {
@@ -136,6 +150,9 @@ const TicketCreationSection = ({
       return;
     }
 
+    // Ensure we have the ID as a number
+    const eventId = typeof event.id === 'string' ? parseInt(event.id, 10) : event.id;
+
     // For PAID events, validate ticket price based on type
     if (Number(event.ticketType) === EventType.PAID) {
       if (ticketState.type === 'REGULAR' && ticketState.regularPrice <= 0) {
@@ -154,30 +171,36 @@ const TicketCreationSection = ({
         return;
       }
 
-      // VIP tickets must cost more than regular tickets if they exist
-      if (
-        ticketState.type === 'VIP' &&
-        event.ticketsData.hasRegularTicket &&
-        ticketState.vipPrice <= parseEther(event.ticketsData.regularTicketFee)
-      ) {
-        setCreationStatus({
-          ...creationStatus,
-          error: 'VIP ticket price must be higher than regular ticket price',
-        });
-        return;
+      // Handle comparison logic for price validation
+      if (ticketState.type === 'VIP' && event.ticketsData.hasRegularTicket) {
+        const regularFee =
+          typeof event.ticketsData.regularTicketFee === 'string'
+            ? BigInt(event.ticketsData.regularTicketFee)
+            : event.ticketsData.regularTicketFee;
+
+        if (parseEther(ticketState.vipPrice.toString()) <= regularFee) {
+          setCreationStatus({
+            ...creationStatus,
+            error: 'VIP ticket price must be higher than regular ticket price',
+          });
+          return;
+        }
       }
 
       // Regular tickets must cost less than VIP tickets if they exist
-      if (
-        ticketState.type === 'REGULAR' &&
-        event.ticketsData.hasVIPTicket &&
-        BigInt(ticketState.regularPrice) >= BigInt(event.ticketsData.vipTicketFee)
-      ) {
-        setCreationStatus({
-          ...creationStatus,
-          error: 'Regular ticket price must be lower than VIP ticket price',
-        });
-        return;
+      if (ticketState.type === 'REGULAR' && event.ticketsData.hasVIPTicket) {
+        const vipFee =
+          typeof event.ticketsData.vipTicketFee === 'string'
+            ? BigInt(event.ticketsData.vipTicketFee)
+            : event.ticketsData.vipTicketFee;
+
+        if (parseEther(ticketState.regularPrice.toString()) >= vipFee) {
+          setCreationStatus({
+            ...creationStatus,
+            error: 'Regular ticket price must be lower than VIP ticket price',
+          });
+          return;
+        }
       }
     }
 
@@ -218,13 +241,16 @@ const TicketCreationSection = ({
       let hash;
 
       try {
+        // Ensure wallet address is properly typed
+        const walletAddress = wallets[0].address as `0x${string}`;
+
         // Create the ticket
         hash = await walletClient.writeContract({
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'createTicket',
-          args: [event.id, ticketCategory, ticketPrice, ticketUri],
-          account: wallets[0].address as `0x${string}`,
+          args: [eventId, ticketCategory, ticketPrice, ticketUri],
+          account: walletAddress,
         });
 
         console.log('Create ticket transaction hash:', hash);
@@ -412,7 +438,7 @@ const TicketCreationSection = ({
             <div className="flex justify-between items-center">
               <span className="font-inter text-medium text-white">Regular Ticket:</span>
               <span className="font-inter text-medium text-primary">
-                {formatEther(parseEther(event.ticketsData.regularTicketFee))} ETN
+                {safeFormatEther(event.ticketsData.regularTicketFee)} ETN
               </span>
             </div>
           )}
@@ -420,7 +446,7 @@ const TicketCreationSection = ({
             <div className="flex justify-between items-center">
               <span className="font-inter text-medium text-white">VIP Ticket:</span>
               <span className="font-inter text-medium text-primary">
-                {formatEther(parseEther(event.ticketsData.vipTicketFee))} ETN
+                {safeFormatEther(event.ticketsData.vipTicketFee)} ETN
               </span>
             </div>
           )}
@@ -441,8 +467,7 @@ const TicketCreationSection = ({
         <div className="mb-4 bg-green-900/30 p-3 rounded-lg flex items-center gap-2">
           <CheckCircle className="w-5 h-5 text-green-400" />
           <p className="font-inter text-sm text-white">
-            Regular ticket created: {formatEther(parseEther(event.ticketsData.regularTicketFee))}{' '}
-            ETN
+            Regular ticket created: {safeFormatEther(event.ticketsData.regularTicketFee)} ETN
           </p>
         </div>
       )}
@@ -451,7 +476,7 @@ const TicketCreationSection = ({
         <div className="mb-4 bg-green-900/30 p-3 rounded-lg flex items-center gap-2">
           <CheckCircle className="w-5 h-5 text-green-400" />
           <p className="font-inter text-sm text-white">
-            VIP ticket created: {formatEther(parseEther(event.ticketsData.vipTicketFee))} ETN
+            VIP ticket created: {safeFormatEther(event.ticketsData.vipTicketFee)} ETN
           </p>
         </div>
       )}
@@ -500,7 +525,7 @@ const TicketCreationSection = ({
             {event.ticketsData.hasVIPTicket && (
               <p className="text-sm text-gray-400 mt-1">
                 Price must be less than VIP ticket (
-                {formatEther(BigInt(event.ticketsData.vipTicketFee))} ETN)
+                {safeFormatEther(event.ticketsData.vipTicketFee)} ETN)
               </p>
             )}
           </div>
@@ -522,7 +547,7 @@ const TicketCreationSection = ({
             {event.ticketsData.hasRegularTicket && (
               <p className="text-sm text-gray-400 mt-1">
                 Price must be greater than Regular ticket (
-                {formatEther(BigInt(event.ticketsData.regularTicketFee))} ETN)
+                {safeFormatEther(event.ticketsData.regularTicketFee)} ETN)
               </p>
             )}
           </div>

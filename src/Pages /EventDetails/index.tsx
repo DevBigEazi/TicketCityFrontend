@@ -23,6 +23,30 @@ import {
   NoEventStateProps,
 } from '../../types';
 
+/**
+ * Converts EventData to the format expected by TicketCreationSection
+ */
+const adaptEventForTicketCreation = (eventData: EventData) => {
+  return {
+    id: eventData.id, // Pass as number which will be compatible with the updated interface
+    ticketType: eventData.ticketType,
+    ticketNFTAddr: eventData.ticketNFTAddr,
+    ticketsData: eventData.ticketsData
+      ? {
+          hasRegularTicket: eventData.ticketsData.hasRegularTicket,
+          hasVIPTicket: eventData.ticketsData.hasVIPTicket,
+          regularTicketFee: eventData.ticketsData.regularTicketFee, // Pass as bigint
+          vipTicketFee: eventData.ticketsData.vipTicketFee, // Pass as bigint
+        }
+      : {
+          hasRegularTicket: false,
+          hasVIPTicket: false,
+          regularTicketFee: 0n,
+          vipTicketFee: 0n,
+        },
+  };
+};
+
 // Loading state component
 const LoadingState = () => (
   <div className="min-h-screen bg-background p-8">
@@ -1186,7 +1210,7 @@ const EventDetails: React.FC = () => {
                 (Number(event.ticketType) === EventType.PAID &&
                   (!event.ticketsData?.hasRegularTicket || !event.ticketsData?.hasVIPTicket)) ? (
                   <TicketCreationSection
-                    event={event}
+                    event={adaptEventForTicketCreation(event)}
                     fetchEventDetails={loadEventDetails}
                     isLoading={isLoading}
                     setIsLoading={setIsLoading}

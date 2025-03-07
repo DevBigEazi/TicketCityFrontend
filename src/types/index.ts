@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatEther as viemFormatEther } from 'viem'; // Import formatEther from viem
 
 export interface NavLink {
   icon: React.ReactNode;
@@ -9,6 +10,27 @@ export interface NavLink {
 export type ViewMode = 'grid' | 'list';
 
 export type EventFilter = 'Regular' | 'All' | 'Free' | 'Paid' | 'VIP' | 'Virtual' | 'In-Person';
+
+// Update the Event interface in TicketCreationSection to match what's being passed from EventDetails
+interface TicketCreationEvent {
+  id: number | string; // Accept both number and string to handle different sources
+  ticketType: number;
+  ticketNFTAddr: `0x${string}` | string; // Accept both Ethereum address format and regular string
+  ticketsData?: {
+    hasRegularTicket: boolean;
+    hasVIPTicket: boolean;
+    regularTicketFee: bigint | string; // Accept both bigint and string to handle different sources
+    vipTicketFee: bigint | string; // Accept both bigint and string to handle different sources
+  };
+}
+
+// Update the props interface to use the new TicketCreationEvent type
+// interface TicketCreationSectionProps {
+//   event: TicketCreationEvent;
+//   fetchEventDetails: (showLoading?: boolean) => Promise<void>;
+//   isLoading: boolean;
+//   setIsLoading: (loading: boolean) => void;
+// }
 
 export interface EventTicketsData {
   hasRegularTicket: boolean;
@@ -68,7 +90,7 @@ export interface TicketTypeSelectorProps {
 }
 
 export interface TicketCreationSectionProps {
-  event: EventData;
+  event: TicketCreationEvent;
   fetchEventDetails: (showLoading?: boolean) => Promise<void>;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -109,45 +131,45 @@ export interface EventConversionOptions {
 }
 
 // Helper function to convert EventData (contract) to Event (UI)
-// export function convertEventDataToEvent(
-//   eventData: EventData,
-//   options: EventConversionOptions = {},
-// ): Event {
-//   const { includeRawData = true } = options;
+export function convertEventDataToEvent(
+  eventData: EventData,
+  options: EventConversionOptions = {},
+): Event {
+  const { includeRawData = true } = options;
 
-//   return {
-//     id: eventData.id.toString(),
-//     type: eventData.ticketType === EventType.FREE ? 'Free' : 'Paid',
-//     title: eventData.title,
-//     description: eventData.desc,
-//     location: eventData.location,
-//     date: new Date(Number(eventData.startDate) * 1000).toISOString(),
-//     endDate: new Date(Number(eventData.endDate) * 1000).toISOString(),
-//     price: {
-//       regular: eventData.ticketsData
-//         ? Number(formatEther(eventData.ticketsData.regularTicketFee))
-//         : 0,
-//       vip: eventData.ticketsData ? Number(formatEther(eventData.ticketsData.vipTicketFee)) : 0,
-//     },
-//     image: eventData.imageUri,
-//     organiser: eventData.organiser,
-//     attendees: {
-//       registered: eventData.userRegCount,
-//       expected: eventData.expectedAttendees,
-//       verified: eventData.verifiedAttendeesCount,
-//     },
-//     remainingTickets: eventData.expectedAttendees - eventData.userRegCount,
-//     hasEnded: Date.now() > Number(eventData.endDate) * 1000,
-//     isVerified: true, // Assuming events from contract are verified
-//     hasTicketCreated: Boolean(
-//       eventData.ticketNFTAddr &&
-//         eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
-//     ),
-//     hasRegularTicket: Boolean(eventData.ticketsData?.hasRegularTicket),
-//     hasVIPTicket: Boolean(eventData.ticketsData?.hasVIPTicket),
-//     rawData: includeRawData ? eventData : undefined,
-//   };
-// }
+  return {
+    id: eventData.id.toString(),
+    type: eventData.ticketType === EventType.FREE ? 'Free' : 'Paid',
+    title: eventData.title,
+    description: eventData.desc,
+    location: eventData.location,
+    date: new Date(Number(eventData.startDate) * 1000).toISOString(),
+    endDate: new Date(Number(eventData.endDate) * 1000).toISOString(),
+    price: {
+      regular: eventData.ticketsData
+        ? Number(viemFormatEther(eventData.ticketsData.regularTicketFee))
+        : 0,
+      vip: eventData.ticketsData ? Number(viemFormatEther(eventData.ticketsData.vipTicketFee)) : 0,
+    },
+    image: eventData.imageUri,
+    organiser: eventData.organiser,
+    attendees: {
+      registered: eventData.userRegCount,
+      expected: eventData.expectedAttendees,
+      verified: eventData.verifiedAttendeesCount,
+    },
+    remainingTickets: eventData.expectedAttendees - eventData.userRegCount,
+    hasEnded: Date.now() > Number(eventData.endDate) * 1000,
+    isVerified: true, // Assuming events from contract are verified
+    hasTicketCreated: Boolean(
+      eventData.ticketNFTAddr &&
+        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
+    ),
+    hasRegularTicket: Boolean(eventData.ticketsData?.hasRegularTicket),
+    hasVIPTicket: Boolean(eventData.ticketsData?.hasVIPTicket),
+    rawData: includeRawData ? eventData : undefined,
+  };
+}
 
 export interface FooterSection {
   title: string;
@@ -164,8 +186,8 @@ export interface Wallet {
 // Helper function type definition
 export type FormatEther = (wei: bigint) => string;
 
-// Add this at the top of the file
-function formatEther(wei: bigint): string {
-  // Simple implementation that converts wei to ether
+// A simple formatEther implementation for use outside of viem context
+// Note: This is only a fallback - use the viem imported function when possible
+export function formatEther(wei: bigint): string {
   return (Number(wei) / 1e18).toString();
 }
