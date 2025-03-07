@@ -215,6 +215,7 @@ const EventsSection: React.FC = () => {
               hasTicketCreated: hasTicketCreated, // Added flag to track if tickets are created
               hasRegularTicket: hasRegularTicket,
               hasVIPTicket: hasVIPTicket,
+              isVerified: false, // Add the missing isVerified property
               rawData: eventData, // Keep raw data for debugging
             };
           }),

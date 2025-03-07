@@ -1,7 +1,7 @@
 import React from 'react';
 import { Calendar, MapPin, Ticket, Users, CheckCircle, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Edvent } from '../../types';
+import { Event } from '../../types';
 
 interface EventCardProps {
   event: Event;
@@ -41,7 +41,7 @@ const EventCard: React.FC<EventCardProps> = ({
     price = { regular: 0, vip: 0 },
     image = '/placeholder-event.jpg',
     type = 'Unknown',
-    rawData,
+    rawData = {} as { startDate: string; endDate: string },
     isVerified = false,
   } = event;
 
