@@ -1,7 +1,7 @@
 import { createWalletClient, createPublicClient, custom, http, fallback } from 'viem';
 import { electroneum } from 'viem/chains';
 
-export const TICKET_CITY_ADDR = '0x33fFf7699D4871a6BF06EBD5e829111D783351a9';
+export const TICKET_CITY_ADDR = '0x123bFf8D754b29772E1EfAD5B075F55600577DcD';
 
 // Primary and fallback RPC URLs
 const PRIMARY_RPC =
