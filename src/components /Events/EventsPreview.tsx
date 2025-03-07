@@ -12,7 +12,7 @@ enum TicketType {
   VIP = 2,
 }
 
-interface EventFormData {
+export interface EventFormData {
   title: string;
   startDateTime: string;
   endDateTime: string;
@@ -22,6 +22,13 @@ interface EventFormData {
   image: File | null;
   eventType: 'PAID' | 'FREE';
   ticketType: keyof typeof TicketType;
+}
+
+export interface EventPreviewComponentProps {
+  eventData: EventFormData;
+  onBack: () => void | Promise<void>;
+  onPublish: (publishData: any) => void;
+  onEdit: () => void | Promise<void>;
 }
 
 /**
@@ -53,14 +60,18 @@ const extractEventIdFromReceipt = (receipt: any): string | null => {
   return null;
 };
 
-const EventPreview = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
+/**
+ * Event Preview Component that can be used either standalone or as part of another page
+ */
+export const EventPreviewComponent: React.FC<EventPreviewComponentProps> = ({
+  eventData,
+  //onBack,
+  onPublish,
+  onEdit,
+}) => {
   const { wallets } = useWallets();
-
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [eventData, setEventData] = useState<EventFormData | null>(null);
   const [walletConnected, setWalletConnected] = useState<boolean>(false);
 
   // Check wallet connection status
@@ -68,17 +79,6 @@ const EventPreview = () => {
     const wallet = wallets?.[0];
     setWalletConnected(!!wallet);
   }, [wallets]);
-
-  // Get event data from location state
-  useEffect(() => {
-    const data = location.state as EventFormData | null;
-    setEventData(data);
-
-    // Redirect if no event data is available
-    if (!data) {
-      setError('No event data available. Please create an event first.');
-    }
-  }, [location.state, navigate]);
 
   const validateDates = (startDate: string, endDate: string) => {
     const start = new Date(startDate);
@@ -95,10 +95,6 @@ const EventPreview = () => {
 
   const convertToUnixTimestamp = (dateStr: string): bigint => {
     return BigInt(Math.floor(new Date(dateStr).getTime() / 1000));
-  };
-
-  const handleEditEvent = () => {
-    navigate('/create-event', { state: eventData });
   };
 
   // Function to wait for a transaction receipt
@@ -129,11 +125,6 @@ const EventPreview = () => {
   };
 
   const handleCreateEvent = async () => {
-    if (!eventData) {
-      setError('No event data available');
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
@@ -227,8 +218,15 @@ const EventPreview = () => {
         createdEventId = '1';
       }
 
-      // Navigate to the new event details page with the event ID and user address
-      navigate(`/event/${createdEventId}`);
+      // Prepare the publish data for the parent to handle
+      const publishData = {
+        ...eventData,
+        id: createdEventId,
+        ipfsUrl,
+      };
+
+      // Call the onPublish prop
+      onPublish(publishData);
     } catch (error: any) {
       console.error('Error during event creation:', error);
       setError(error.message || 'Failed to create event');
@@ -259,25 +257,6 @@ const EventPreview = () => {
       <div className="min-h-screen bg-background p-8 flex flex-col justify-center items-center">
         <div className="max-w-[80%] w-full border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
           <p className="text-white text-center">Creating your event...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Handle case when no event data is available
-  if (!eventData) {
-    return (
-      <div className="min-h-screen bg-background p-8 flex flex-col justify-center items-center">
-        <div className="max-w-[80%] w-full border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
-          <p className="text-white text-center mb-4">No event data available.</p>
-          <div className="flex justify-center">
-            <button
-              onClick={() => navigate('/create-event')}
-              className="bg-primary text-white py-3 px-6 rounded-lg font-semibold hover:opacity-80"
-            >
-              Create New Event
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -325,7 +304,7 @@ const EventPreview = () => {
         {/* Action Buttons */}
         <div className="flex justify-between mt-8">
           <button
-            onClick={handleEditEvent}
+            onClick={onEdit}
             disabled={isLoading}
             className="bg-searchBg text-white py-3 px-6 rounded-lg font-semibold hover:opacity-80 disabled:opacity-50"
           >
@@ -342,6 +321,65 @@ const EventPreview = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+/**
+ * Standalone EventPreview page that loads data from location state
+ */
+const EventPreview = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [eventData, setEventData] = useState<EventFormData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  console.log('error :', error);
+
+  // Get event data from location state
+  useEffect(() => {
+    const data = location.state as EventFormData | null;
+    setEventData(data);
+
+    // Redirect if no event data is available
+    if (!data) {
+      setError('No event data available. Please create an event first.');
+    }
+  }, [location.state, navigate]);
+
+  // Handle case when no event data is available
+  if (!eventData) {
+    return (
+      <div className="min-h-screen bg-background p-8 flex flex-col justify-center items-center">
+        <div className="max-w-[80%] w-full border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
+          <p className="text-white text-center mb-4">No event data available.</p>
+          <div className="flex justify-center">
+            <button
+              onClick={() => navigate('/create-event')}
+              className="bg-primary text-white py-3 px-6 rounded-lg font-semibold hover:opacity-80"
+            >
+              Create New Event
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const handlePublish = (publishData: any) => {
+    // Navigate to the published event details page with the event ID
+    navigate(`/event/${publishData.id}`, { state: publishData });
+  };
+
+  const handleEdit = () => {
+    navigate('/create-event', { state: eventData });
+  };
+
+  return (
+    <EventPreviewComponent
+      eventData={eventData}
+      onBack={() => navigate('/create-event')}
+      onPublish={handlePublish}
+      onEdit={handleEdit}
+    />
   );
 };
 
