@@ -97,6 +97,7 @@ export interface TicketCreationSectionProps {
 }
 
 // This is your existing Event interface for the UI components
+
 export interface Event {
   id: string;
   type: string;
@@ -122,7 +123,11 @@ export interface Event {
   hasTicketCreated: boolean;
   hasRegularTicket: boolean;
   hasVIPTicket: boolean;
-  rawData: unknown;
+  rawData: {
+    startDate?: string;
+    endDate?: string;
+    [key: string]: any;
+  };
 }
 
 // Helper type for converting between contract data and UI data

@@ -41,19 +41,29 @@ const EventCard: React.FC<EventCardProps> = ({
     price = { regular: 0, vip: 0 },
     image = '/placeholder-event.jpg',
     type = 'Unknown',
-    rawData = {} as { startDate: string; endDate: string },
+    rawData = {} as { startDate?: string | bigint; endDate?: string | bigint; [key: string]: any },
     isVerified = false,
   } = event;
 
   // Check if event has started but not ended
   const isEventLive = () => {
-    if (!rawData) return false;
+    if (!rawData || !rawData.startDate || !rawData.endDate) return false;
 
     const now = Math.floor(Date.now() / 1000); // Current time in seconds
     const startTime = Number(rawData.startDate);
     const endTime = Number(rawData.endDate);
 
     return now >= startTime && now < endTime;
+  };
+
+  // Calculate if the event has not started yet
+  const hasNotStarted = (): boolean => {
+    if (!rawData || !rawData.startDate) return false;
+
+    const now = Math.floor(Date.now() / 1000);
+    const startTime = Number(rawData.startDate);
+
+    return now < startTime;
   };
 
   // Determine if the event is currently live
@@ -63,9 +73,10 @@ const EventCard: React.FC<EventCardProps> = ({
   const regularPrice = typeof price?.regular === 'number' ? price.regular : 0;
   const vipPrice = typeof price?.vip === 'number' ? price.vip : 0;
 
-  // Handle image loading errors
-  const handleImageError = (e: any) => {
-    e.target.src = '/placeholder-event.jpg';
+  // Handle image loading errors - fixed type issue
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = e.target as HTMLImageElement;
+    target.src = '/placeholder-event.jpg';
   };
 
   const isGrid = viewMode === 'grid';
@@ -161,7 +172,7 @@ const EventCard: React.FC<EventCardProps> = ({
   );
 
   // Handle check-in button click
-  const handleCheckInClick = (e: any) => {
+  const handleCheckInClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
     if (onCheckIn) {
       onCheckIn(id);
@@ -343,13 +354,13 @@ const EventCard: React.FC<EventCardProps> = ({
               {/* Check-in button - disabled if verified or event hasn't started yet */}
               <button
                 onClick={handleCheckInClick}
-                disabled={isVerified || event.hasNotStarted}
+                disabled={isVerified || hasNotStarted()}
                 className={`
                   flex items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors
                   ${
                     isVerified
                       ? 'bg-green-500 bg-opacity-20 text-green-500 cursor-not-allowed'
-                      : event.hasNotStarted
+                      : hasNotStarted()
                         ? 'bg-gray-500 bg-opacity-20 text-gray-400 cursor-not-allowed'
                         : 'bg-primary hover:bg-primary/90 text-white'
                   }
