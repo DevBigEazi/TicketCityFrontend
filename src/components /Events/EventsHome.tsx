@@ -6,14 +6,91 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 import { encodeFunctionData, formatEther } from 'viem';
 
+// Define interfaces for the event data structure
+interface EventData {
+  title: string;
+  desc: string;
+  location: string;
+  startDate: bigint;
+  endDate: bigint;
+  ticketType: number;
+  imageUri: string;
+  organiser: string;
+  userRegCount: bigint;
+  expectedAttendees: bigint;
+  verifiedAttendeesCount: bigint;
+  // Add other properties as needed
+}
+
+interface EventTickets {
+  regularTicketFee: bigint;
+  vipTicketFee: bigint;
+  // Add other properties as needed
+}
+
+// Define interface for event objects in your state
+interface Event {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  location: string;
+  date: string;
+  endDate: string;
+  price: {
+    regular: number;
+    vip: number;
+  };
+  image: string;
+  organiser: string;
+  attendees: {
+    registered: number;
+    expected: number;
+    verified: number;
+  };
+  hasEnded: boolean;
+  hasNotStarted: boolean;
+  isLive: boolean;
+  isVerified: boolean;
+  hasTicket: boolean;
+  ticketType: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  rawData: EventData;
+
+  remainingTickets: number;
+  hasTicketCreated: boolean;
+  hasRegularTicket: boolean;
+  hasVIPTicket: boolean;
+}
+
+interface TicketDetails {
+  eventIds: bigint[];
+  ticketTypes: string[];
+}
+
+interface TicketsMap {
+  [key: string]: string;
+}
+
+// Define component prop types
+// interface EventCardProps {
+//   event: Event;
+//   viewMode: 'grid' | 'list';
+//   hasTicket: boolean;
+//   ticketType: string;
+//   isDashboard: boolean;
+//   onCheckIn: (eventId: string) => void;
+// }
+
 const EventsDashboardHome = () => {
-  const [viewMode] = useState('grid');
-  const [events, setEvents] = useState([]);
+  const [viewMode] = useState<'grid' | 'list'>('grid');
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [tokenBalance, setTokenBalance] = useState('Loading...');
-  const [userTickets, setUserTickets] = useState({});
+  const [userTickets, setUserTickets] = useState<TicketsMap>({});
   const [copyStatus, setCopyStatus] = useState(false);
   const [ticketStats, setTicketStats] = useState({
     total: 0,
@@ -21,7 +98,11 @@ const EventsDashboardHome = () => {
     pending: 0,
   });
   const [checkingIn, setCheckingIn] = useState(false);
-  const [checkInStatus, setCheckInStatus] = useState({ eventId: null, status: '', message: '' });
+  const [checkInStatus, setCheckInStatus] = useState<{
+    eventId: string | null;
+    status: string;
+    message: string;
+  }>({ eventId: null, status: '', message: '' });
 
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
@@ -32,7 +113,7 @@ const EventsDashboardHome = () => {
   const publicClient = createPublicClientInstance();
 
   // Helper function to format Unix timestamp to readable date
-  const formatDate = (timestamp: any) => {
+  const formatDate = (timestamp: bigint | string | number | undefined): string => {
     if (!timestamp) return 'TBD';
 
     const eventDate = new Date(Number(timestamp) * 1000);
@@ -71,7 +152,7 @@ const EventsDashboardHome = () => {
 
     try {
       const tokenBalanceWei = await publicClient.getBalance({
-        address: wallets[0].address,
+        address: wallets[0].address as `0x${string}`,
       });
 
       const formattedBalance = formatEther(tokenBalanceWei);
@@ -107,12 +188,12 @@ const EventsDashboardHome = () => {
 
     try {
       // Get all events the user has registered for
-      const registeredEventIds = await publicClient.readContract({
+      const registeredEventIds = (await publicClient.readContract({
         address: TICKET_CITY_ADDR,
         abi: TICKET_CITY_ABI,
         functionName: 'allEventsRegisteredForByAUser',
         args: [walletAddress],
-      });
+      })) as bigint[];
 
       console.log('User registered event ids:', registeredEventIds);
       console.log('User registered events count:', registeredEventIds?.length || 0);
@@ -126,8 +207,8 @@ const EventsDashboardHome = () => {
       }
 
       // Check verification status for each registered event
-      const ticketsMap = {};
-      const verifiedMap = {};
+      const ticketsMap: TicketsMap = {};
+      const verifiedMap: Record<string, boolean> = {};
 
       // Batch check verification status for each event
       await Promise.all(
@@ -143,7 +224,7 @@ const EventsDashboardHome = () => {
                 functionName: 'isVerified',
                 args: [walletAddress, eventId],
               });
-              verifiedMap[eventIdStr] = isVerified;
+              verifiedMap[eventIdStr] = Boolean(isVerified);
             } catch (error) {
               console.error(`Error checking verification for event ${eventIdStr}:`, error);
               verifiedMap[eventIdStr] = false;
@@ -156,19 +237,25 @@ const EventsDashboardHome = () => {
 
       // Get ticket types for the registered events
       try {
-        const ticketDetails = await publicClient.readContract({
+        const ticketDetails = (await publicClient.readContract({
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'getMyTickets',
           args: [],
-        });
+        })) as TicketDetails;
 
-        if (ticketDetails && Array.isArray(ticketDetails) && ticketDetails.length >= 3) {
-          const [eventIds, ticketTypes] = ticketDetails;
-
-          eventIds.forEach((eventId, index) => {
+        if (
+          ticketDetails &&
+          ticketDetails.eventIds &&
+          Array.isArray(ticketDetails.eventIds) &&
+          ticketDetails.ticketTypes &&
+          Array.isArray(ticketDetails.ticketTypes)
+        ) {
+          ticketDetails.eventIds.forEach((eventId, index) => {
             const eventIdStr = eventId.toString();
-            ticketsMap[eventIdStr] = ticketTypes[index];
+            if (index < ticketDetails.ticketTypes.length) {
+              ticketsMap[eventIdStr] = ticketDetails.ticketTypes[index];
+            }
           });
         }
       } catch (error) {
@@ -182,12 +269,12 @@ const EventsDashboardHome = () => {
         registeredEventIds.map(async (eventId) => {
           try {
             const eventIdStr = eventId.toString();
-            const eventData = await publicClient.readContract({
+            const eventData = (await publicClient.readContract({
               address: TICKET_CITY_ADDR,
               abi: TICKET_CITY_ABI,
               functionName: 'getEvent',
               args: [eventId],
-            });
+            })) as EventData;
 
             // Classify event status based on current time
             const now = Date.now();
@@ -213,25 +300,18 @@ const EventsDashboardHome = () => {
             let ticketType = ticketsMap[eventIdStr] || 'Regular';
 
             try {
-              const eventTickets = await publicClient.readContract({
+              const eventTickets = (await publicClient.readContract({
                 address: TICKET_CITY_ADDR,
                 abi: TICKET_CITY_ABI,
                 functionName: 'eventTickets',
                 args: [eventId],
-              });
+              })) as EventTickets;
 
               if (eventTickets) {
-                if (Array.isArray(eventTickets)) {
-                  regularPrice = eventTickets[2] ? Number(eventTickets[2]) / 1e18 : 0;
-                  vipPrice = eventTickets[3] ? Number(eventTickets[3]) / 1e18 : 0;
-                } else {
-                  regularPrice = eventTickets.regularTicketFee
-                    ? Number(eventTickets.regularTicketFee) / 1e18
-                    : 0;
-                  vipPrice = eventTickets.vipTicketFee
-                    ? Number(eventTickets.vipTicketFee) / 1e18
-                    : 0;
-                }
+                regularPrice = eventTickets.regularTicketFee
+                  ? Number(eventTickets.regularTicketFee) / 1e18
+                  : 0;
+                vipPrice = eventTickets.vipTicketFee ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
               }
             } catch (error) {
               console.error(`Error fetching ticket details for event ${eventId}:`, error);
@@ -277,7 +357,7 @@ const EventsDashboardHome = () => {
       );
 
       // Filter out null responses
-      const formattedEvents = eventsData.filter((event) => event !== null);
+      const formattedEvents = eventsData.filter((event): event is Event => event !== null);
       console.log('Successfully fetched', formattedEvents.length, 'events');
 
       // Update ticket stats
@@ -329,7 +409,7 @@ const EventsDashboardHome = () => {
   };
 
   // Format wallet address for display
-  const formatWalletAddress = (address) => {
+  const formatWalletAddress = (address: string): string => {
     if (!address) return 'Not Connected';
     return `${address.substring(0, 8)}...${address.substring(address.length - 6)}`;
   };
@@ -362,7 +442,7 @@ const EventsDashboardHome = () => {
   };
 
   // Handle check-in process
-  const handleCheckIn = async (eventId) => {
+  const handleCheckIn = async (eventId: string) => {
     if (!wallet || checkingIn) return;
 
     setCheckingIn(true);
@@ -381,7 +461,7 @@ const EventsDashboardHome = () => {
       const verifyAttendanceData = encodeFunctionData({
         abi: TICKET_CITY_ABI,
         functionName: 'verifyAttendance',
-        args: [eventId],
+        args: [BigInt(eventId)],
       });
 
       const eventTxHash = await provider.request({
@@ -390,7 +470,7 @@ const EventsDashboardHome = () => {
       });
 
       // Wait for transaction receipt
-      const eventReceipt = await waitForReceipt(provider, eventTxHash);
+      await waitForReceipt(provider, eventTxHash);
 
       setCheckInStatus({
         eventId: eventId,
@@ -400,7 +480,7 @@ const EventsDashboardHome = () => {
 
       // Wait for the transaction to be confirmed
       const receipt = await publicClient.waitForTransactionReceipt({
-        hash: eventTxHash, // Fixed: use eventTxHash instead of undefined hash variable
+        hash: eventTxHash as `0x${string}`,
       });
 
       if (receipt.status === 'success') {
@@ -432,7 +512,7 @@ const EventsDashboardHome = () => {
       } else {
         throw new Error('Transaction failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Check-in failed:', error);
       setCheckInStatus({
         eventId: eventId,
