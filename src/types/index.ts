@@ -8,7 +8,16 @@ export interface NavLink {
 }
 
 export type ViewMode = 'grid' | 'list';
-export type EventFilter = 'Regular' | 'All' | 'Free' | 'Paid' | 'VIP' | 'Virtual' | 'In-Person';
+
+export type EventFilter =
+  | 'All'
+  | 'Free'
+  | 'Paid'
+  | 'Regular'
+  | 'VIP'
+  | 'Virtual'
+  | 'In-Person'
+  | 'Nearby';
 
 // Enum definitions for ticket types to match the contract
 export enum TicketType {
@@ -102,6 +111,20 @@ export interface UIEvent {
     [key: string]: any;
   };
   hasNotStarted?: boolean;
+  coordinates: { lat: number; lng: number } | null;
+  distance: number | null;
+  locationInfo?: string; // Optional property for formatted location display
+}
+
+export interface EventCardProps {
+  event: Event | UIEvent;
+  viewMode?: 'grid' | 'list';
+  hasTicket?: boolean;
+  ticketType?: string;
+  isDashboard?: boolean; // Flag to determine if we're in dashboard or listing view
+  isVerified?: boolean; // Flag to determine if the ticket is verified
+  onCheckIn?: (eventId: string) => void; // Optional check-in callback
+  locationInfo?: string; // Add this property for location display
 }
 
 // Props types for components
