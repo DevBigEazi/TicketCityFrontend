@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutGrid, List, RefreshCw, MapPin, Compass } from 'lucide-react';
+import { LayoutGrid, List, MapPin, Compass } from 'lucide-react';
 import EventCard from './EventsCard';
 import { UIEvent, EventFilter, ViewMode } from '../../types';
 import TICKET_CITY_ABI from '../../abi/abi.json';
@@ -15,7 +15,7 @@ const EventsSection: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [activeFilter, setActiveFilter] = useState<EventFilter>('All');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'Date' | 'Popularity' | 'Ticket Price' | 'Distance'>('Date');
+  const [sortBy, setSortBy] = useState<'Distance' | 'Popularity' | 'Ticket Price' | 'Date'>('Date');
   const [events, setEvents] = useState<UIEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -463,9 +463,8 @@ const EventsSection: React.FC = () => {
     }
   };
 
-  // Initial fetch and check for cached user location
-  useEffect(() => {
-    // Try to load cached location first
+  //
+  const handleSetLocationStatus = async () => {
     const cachedLocation = localStorage.getItem('userLocation');
     if (cachedLocation) {
       try {
@@ -489,13 +488,21 @@ const EventsSection: React.FC = () => {
       // If no cached location, try to get it automatically
       getUserLocation();
     }
+  };
 
+  // Initial fetch and check for cached user location
+  useEffect(() => {
+    // Try to load cached location first
+    handleSetLocationStatus();
     // Fetch events regardless of location status
     fetchEvents(true);
   }, []);
 
   // Set up polling for real-time updates
   useEffect(() => {
+    // Try to load cached location first
+    handleSetLocationStatus();
+
     // Only set up polling if we have loaded events at least once
     if (loading && events.length === 0) return;
 
@@ -525,11 +532,6 @@ const EventsSection: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
-
-  // Manual refresh function
-  const handleManualRefresh = () => {
-    fetchEvents(false);
-  };
 
   // Format distance for display
   const formatDistance = (distance: number | null): string => {
@@ -631,19 +633,10 @@ const EventsSection: React.FC = () => {
               </button>
             )}
 
-            {/* Refresh button */}
-            <button
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              className="flex items-center gap-2 text-textGray hover:text-white p-2 rounded-lg hover:bg-searchBg disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="font-inter text-xs text-textGray">
-                {isRefreshing
-                  ? 'Refreshing...'
-                  : `Last updated: ${lastUpdated.toLocaleTimeString()}`}
-              </span>
-            </button>
+            {/* Last Refresh time */}
+            <span className="font-inter text-xs text-textGray">
+              {isRefreshing ? 'Refreshing...' : `Last updated: ${lastUpdated.toLocaleTimeString()}`}
+            </span>
           </div>
         </div>
       </div>
