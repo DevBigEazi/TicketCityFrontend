@@ -107,7 +107,7 @@ const EventsDashboardHome = () => {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  const walletAddress = wallets?.[0]?.address;
+  const walletAddress = wallets?.[0]?.address as `0x${string}`;
   const wallet = wallets?.[0];
 
   const publicClient = createPublicClientInstance();
@@ -152,7 +152,7 @@ const EventsDashboardHome = () => {
 
     try {
       const tokenBalanceWei = await publicClient.getBalance({
-        address: wallets[0].address as `0x${string}`,
+        address: walletAddress,
       });
 
       const formattedBalance = formatEther(tokenBalanceWei);
