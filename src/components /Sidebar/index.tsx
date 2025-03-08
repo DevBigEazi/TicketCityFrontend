@@ -4,11 +4,10 @@ import {
   Compass,
   PlusCircle,
   Wallet,
-  Shield,
-  Users,
   Settings,
   ChevronDown,
   CalendarCheck,
+  Building2,
 } from 'lucide-react';
 import { useUser } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -20,9 +19,9 @@ const navLinks = [
   { icon: <Compass />, label: 'Explore Events', path: '/explore' },
   { icon: <PlusCircle />, label: 'Create Event', path: '/create-event' },
   { icon: <CalendarCheck />, label: 'My Events', path: '/my-events' },
-  { icon: <Wallet />, label: 'My Wallet', path: '/wallet' },
-  { icon: <Shield />, label: 'Ticket Verification', path: '/verify' },
-  { icon: <Users />, label: 'Organizers Hub', path: '/organizers' },
+  { icon: <Wallet />, label: 'My Wallet', path: '/my-wallet' },
+  //   { icon: <Shield />, label: 'Ticket Verification', path: '/verify' },
+  { icon: <Building2 />, label: 'Hub', path: '/organizers' },
   { icon: <Settings />, label: 'Settings', path: '/settings' },
 ];
 interface SidebarProps {

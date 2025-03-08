@@ -8,19 +8,20 @@ interface EventCardProps {
   viewMode?: 'grid' | 'list';
   hasTicket?: boolean;
   ticketType?: string;
-  isDashboard?: boolean; // Flag to determine if we're in dashboard or listing view
-  isVerified?: boolean; // Flag to determine if the ticket is verified
-  onCheckIn?: (eventId: string) => void; // Optional check-in callback
+  isDashboard?: boolean;
+  isVerified?: boolean;
+  onCheckIn?: (eventId: string) => void;
+  locationInfo?: string; // Add this new property
 }
 
 const EventCard: React.FC<EventCardProps> = ({
   event,
   viewMode = 'grid',
   hasTicket = false,
-  //ticketType = 'Unknown',
   isDashboard = false,
   isVerified,
   onCheckIn,
+  locationInfo,
 }) => {
   // Guard against undefined or null event
   if (!event) {
@@ -286,7 +287,7 @@ const EventCard: React.FC<EventCardProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-primary" />
-              <span className="font-inter text-sm text-textGray">{location}</span>
+              <span className="font-inter text-sm text-textGray">{locationInfo || location}</span>
             </div>
           </div>
 
