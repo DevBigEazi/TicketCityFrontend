@@ -321,9 +321,9 @@ const CreateEventFormComponent = ({ onContinue }: CreateEventFormComponentProps)
 
           <button
             type="submit"
-            className="w-full py-4 rounded-lg font-semibold text-lg transition-all bg-primary text-white hover:opacity-90"
+            className="flex justify-center items-center w-28 h-11 py-4 rounded-lg font-medium text-lg transition-all bg-primary text-white hover:opacity-90"
           >
-            Preview Event
+            Preview
           </button>
         </form>
       </div>

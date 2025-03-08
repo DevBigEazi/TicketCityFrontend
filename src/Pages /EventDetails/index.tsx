@@ -276,7 +276,6 @@ const EventDetails = () => {
   };
 
   // Purchase ticket function error handling
-  // Purchase ticket function error handling
   const handlePurchaseTicket = async () => {
     // Check if event exists and wallet is connected
     if (!event || !wallets || !wallets.length || !wallets[0]) {
@@ -978,7 +977,7 @@ const EventDetails = () => {
       <div className="max-w-[80%] mx-auto py-8">
         {/* Back Button */}
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/my-events')}
           className="flex items-center gap-2 mb-8 hover:opacity-80"
         >
           <ArrowLeft className="w-5 h-5 text-white" />

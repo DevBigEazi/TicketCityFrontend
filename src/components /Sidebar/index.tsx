@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import { useUser } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { maskEmail } from '../../utils/maskedEmail';
+import { maskEmail, permanentUserIdentity, truncateAddress } from '../../utils/generalUtils';
+import { images } from '../../constant';
 
 const navLinks = [
   { icon: <LayoutDashboard />, label: 'Dashboard', path: '/dashboard' },
@@ -48,11 +49,6 @@ const Sidebar: React.FC<SidebarProps> = () => {
   // Only mask email if it exists
   const userEmailMasked = userEmail ? maskEmail(userEmail) : '';
 
-  const truncateAddress = (address: string): string => {
-    if (!address) return '';
-    return `${address.slice(0, 6)}...${address.slice(-6)}`;
-  };
-
   // Change the logic to check if any user information exists before trying to display it
   const displayName =
     userNameFromGoogle ||
@@ -69,9 +65,8 @@ const Sidebar: React.FC<SidebarProps> = () => {
     <aside className="w-64 h-full bg-background border-r border-borderStroke flex flex-col">
       {/* Logo */}
       <div className="p-6">
-        {/* Replace with proper import or public path */}
         <img
-          src="/logo.png"
+          src={images.TicketCityLogo}
           alt="TicketCity"
           className="h-16"
           onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -83,9 +78,9 @@ const Sidebar: React.FC<SidebarProps> = () => {
       {/* User Profile */}
       <div className="px-6 py-4 flex items-center gap-2 border-b border-borderStroke">
         <img
-          src="https://gateway.pinata.cloud/ipfs/QmTXNQNNhFkkpCaCbHDfzbUCjXQjQnhX7QFoX1YVRQCSC8"
+          src={permanentUserIdentity}
           alt="TicketCity"
-          className="h-8"
+          className="h-10 w-10 rounded-full"
           onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
             e.currentTarget.src = '/placeholder-logo.svg';
           }}

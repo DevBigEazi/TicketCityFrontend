@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, Eye, Upload, RefreshCw } from 'lucide-react';
-import { EventImg1 } from '../../assets';
 
 const ManageEventsComponent: React.FC = () => {
   const navigate = useNavigate();
@@ -32,7 +31,7 @@ const ManageEventsComponent: React.FC = () => {
         {/* Event Banner */}
         <div className="mb-8 rounded-2xl border border-borderStroke shadow-button-inset overflow-hidden">
           <div className="relative">
-            <img src={EventImg1} alt="Event Banner" className="w-full h-32 sm:h-48 object-cover" />
+            <img src={"/placeholder-event.jpg"} alt="Event Banner" className="w-full h-32 sm:h-48 object-cover" />
             <button className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 bg-primary rounded-lg px-2 sm:px-4 py-1 sm:py-2 text-white font-poppins flex items-center gap-1 sm:gap-2 text-xs sm:text-base">
               <Upload size={14} className="sm:w-4 sm:h-4" />
               Upload New Image

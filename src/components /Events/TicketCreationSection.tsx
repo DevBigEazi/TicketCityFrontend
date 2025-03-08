@@ -45,8 +45,8 @@ const TicketCreationSection = ({
   event,
   fetchEventDetails,
   isLoading,
-  //setIsLoading,
-}: TicketCreationSectionProps) => {
+}: //setIsLoading,
+TicketCreationSectionProps) => {
   const { wallets } = useWallets();
   const publicClient = createPublicClientInstance();
 
@@ -260,7 +260,9 @@ const TicketCreationSection = ({
         setCreationStatus({
           loading: false,
           success: false,
-          error: `Transaction failed: ${walletError instanceof Error ? walletError.message : 'Unknown error'}. Please try again.`,
+          error: `Transaction failed: ${
+            walletError instanceof Error ? walletError.message : 'Unknown error'
+          }. Please try again.`,
           currentType: ticketState.type,
         });
         return; // Exit early
@@ -581,15 +583,15 @@ const TicketCreationSection = ({
                 canCreateVIP && !canCreateRegular
                   ? 'VIP'
                   : canCreateRegular && !canCreateVIP
-                    ? 'Regular'
-                    : ticketState.type
+                  ? 'Regular'
+                  : ticketState.type
               } Ticket...`
             : `Create ${
                 canCreateVIP && !canCreateRegular
                   ? 'VIP'
                   : canCreateRegular && !canCreateVIP
-                    ? 'Regular'
-                    : ticketState.type
+                  ? 'Regular'
+                  : ticketState.type
               } Ticket`}
         </button>
       </div>

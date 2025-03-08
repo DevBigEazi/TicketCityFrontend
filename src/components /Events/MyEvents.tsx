@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Calendar, Ticket, RefreshCw, QrCode } from 'lucide-react';
-import { EventImg1 } from '../../assets';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
@@ -27,7 +26,7 @@ const MyEventsComponent = () => {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  const walletAddress = wallets?.[0]?.address;
+  const walletAddress = wallets?.[0]?.address as `0x${string}`;
   const publicClient = createPublicClientInstance();
 
   // Format date for display - keeping only for backward compatibility
@@ -95,7 +94,7 @@ const MyEventsComponent = () => {
 
     try {
       const tokenBalanceWei = await publicClient.getBalance({
-        address: `0x${walletAddress}`,
+        address: walletAddress,
       });
 
       const formattedBalance = formatEther(tokenBalanceWei);
@@ -174,7 +173,7 @@ const MyEventsComponent = () => {
               const isLive = !hasEnded && !hasNotStarted;
 
               // Process the image URL
-              let imageUrl = (eventData as any).imageUri || EventImg1;
+              let imageUrl = (eventData as any).imageUri || '/placeholder-event.jpg';
 
               // Calculate revenue info
               const eventRevenue = (revenueDetails as any[])[2]
@@ -333,7 +332,7 @@ const MyEventsComponent = () => {
             const isLive = !hasEnded && !hasNotStarted;
 
             // Process the image URL
-            let imageUrl = (eventData as any).imageUri || EventImg1;
+            let imageUrl = (eventData as any).imageUri || '/placeholder-event.jpg';
 
             // Format start and end times
             const startDate = new Date(startTimestamp);
