@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle, Share } from 'lucide-react';
 import { usePrivy, useUser, useWallets } from '@privy-io/react-auth';
 import {
   createPublicClientInstance,
@@ -1141,6 +1141,93 @@ const EventDetails = () => {
             <PurchaseTicketSection />
           ) : (
             <NoTicketsSection />
+          )}
+
+          {/* Always show these buttons for the users if tickets are created */}
+          {ticketCreated && (
+            <div className="mt-6 space-y-4">
+              <button
+                onClick={() => {
+                  // Get the current URL
+                  const eventUrl = window.location.href;
+
+                  // Check if the Web Share API is available (mobile devices mostly)
+                  if (navigator.share) {
+                    navigator
+                      .share({
+                        title: `${event.details.title || 'Blockchain Event'}`,
+                        text: `Check out this event: ${event.details.title || 'Blockchain Event'}`,
+                        url: eventUrl,
+                      })
+                      .then(() => console.log('Successfully shared'))
+                      .catch((error) => console.log('Error sharing:', error));
+                  } else {
+                    // Fallback for desktop browsers that don't support Web Share API
+                    try {
+                      // Copy to clipboard
+                      navigator.clipboard
+                        .writeText(eventUrl)
+                        .then(() => {
+                          // Create and display a temporary notification
+                          const notification = document.createElement('div');
+                          notification.textContent = 'Link copied to clipboard!';
+                          notification.style.position = 'fixed';
+                          notification.style.bottom = '20px';
+                          notification.style.left = '50%';
+                          notification.style.transform = 'translateX(-50%)';
+                          notification.style.backgroundColor = '#6A00F4';
+                          notification.style.color = 'white';
+                          notification.style.padding = '10px 20px';
+                          notification.style.borderRadius = '5px';
+                          notification.style.zIndex = '1000';
+                          notification.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+
+                          document.body.appendChild(notification);
+
+                          // Remove notification after 3 seconds
+                          setTimeout(() => {
+                            notification.style.opacity = '0';
+                            notification.style.transition = 'opacity 0.5s ease-out';
+                            setTimeout(() => document.body.removeChild(notification), 500);
+                          }, 3000);
+                        })
+                        .catch((err) => {
+                          console.error('Failed to copy link: ', err);
+                          alert('Failed to copy link to clipboard. Please try again.');
+                        });
+                    } catch (err) {
+                      console.error('Clipboard API not available:', err);
+                      // For older browsers without clipboard API
+                      const textArea = document.createElement('textarea');
+                      textArea.value = eventUrl;
+                      textArea.style.position = 'fixed';
+                      textArea.style.left = '-999999px';
+                      textArea.style.top = '-999999px';
+                      document.body.appendChild(textArea);
+                      textArea.focus();
+                      textArea.select();
+
+                      try {
+                        const successful = document.execCommand('copy');
+                        if (successful) {
+                          alert('Link copied to clipboard!');
+                        } else {
+                          alert('Failed to copy link. Please copy it manually: ' + eventUrl);
+                        }
+                      } catch (err) {
+                        alert('Failed to copy link. Please copy it manually: ' + eventUrl);
+                      }
+
+                      document.body.removeChild(textArea);
+                    }
+                  }
+                }}
+                className="w-48 h-11 flex justify-center items-center gap-x-1 bg-primary rounded-lg py-3 font-poppins text-[18px] font-medium text-white"
+              >
+                <Share className="w-5 h-5 text-white" />
+                Share Event
+              </button>
+            </div>
           )}
         </div>
 
