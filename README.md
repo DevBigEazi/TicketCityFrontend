@@ -2,8 +2,7 @@
 
 'Ticket_City frontend successfully deployed to ICP canister local network': 'bkyz2-fmaaa-aaaaa-qaaaq-cai'.
 
-'Ticket_City smart contract successfully deployed to Electroneum mainnetwork': 'bkyz2-fmaaa-aaaaa-qaaaq-cai'.
-
+'Ticket_City smart contract successfully deployed to Electroneum mainnet': '0x123bFf8D754b29772E1EfAD5B075F55600577DcD'.
 
 ## Smart Contract Architecture
 
