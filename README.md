@@ -267,6 +267,7 @@ git checkout -b docs/issue-number-description
 For additional support or questions:
 
 1. Check existing documentation
+
 2. Search closed issues
 3. Join Telegram community
 4. Contact @devbigeazi
@@ -274,3 +275,8 @@ For additional support or questions:
 ## All tests passed
 
 <img width="641" alt="test" src="https://github.com/user-attachments/assets/41e09d25-3162-4012-8b0b-d7a7cfca2677" />
+
+Frontend leveraging ICP
+<img width="960" alt="icp" src="https://github.com/user-attachments/assets/04fa8756-8747-425e-81fd-aaa91d5ea177" />
+
+<img width="960" alt="icp2" src="https://github.com/user-attachments/assets/5e3bedb6-c0fe-4b00-8e06-0c2867b0d2cd" />
