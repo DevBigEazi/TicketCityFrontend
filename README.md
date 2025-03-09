@@ -1,43 +1,20 @@
-<<<<<<< HEAD
-# Ticket City - Technical Documentation (React Vite)
-
-## Project Overview
-=======
 # Ticket City - Frontend Documentation
 
 'Ticket_City frontend successfully deployed to ICP canister local network': 'bkyz2-fmaaa-aaaaa-qaaaq-cai'.
 
 'Ticket_City smart contract successfully deployed to Electroneum mainnet': '0x123bFf8D754b29772E1EfAD5B075F55600577DcD'.
->>>>>>> e0c61ebb534ba38a2aac8f98678e996f48fff2e9
 
-Ticket City is a blockchain-based event ticketing platform built with React Vite. It enables event organizers to create events and sell tickets as NFTs while ensuring secure transactions using ETN.
+## Smart Contract Architecture
 
-## Key Features
+### Core Components
 
-<<<<<<< HEAD
-- Event creation with flexible ticket types (FREE/PAID).
-- Ticket categories: Regular and VIP for paid events.
-- Secure transactions through ETN payments.
-- Attendance tracking and verification.
-- NFT-based ticket issuance.
-- Automated ticket pricing (Future Feature).
-- Event discovery tools (Future Feature).
-- Stablecoin payments (Future Feature).
-=======
 1. `Ticket_City.sol`: Main contract handling event logic and ETN payments
 2. `Ticket_NFT.sol`: Non-transferable NFT implementation for event tickets
 3. `Types.sol`: Data structures and enums
 4. `Errors.sol`: Custom error definitions
->>>>>>> e0c61ebb534ba38a2aac8f98678e996f48fff2e9
 
-## Prerequisites
+#### Security Measures
 
-<<<<<<< HEAD
-- Node.js (v16+)
-- npm or yarn
-- Git
-- ANKR RPC (Electroneum Testnet)
-=======
 - NonReentrant guard for payment functions
 - Event organizer verification
 - Minimum attendance rate requirements
@@ -124,85 +101,18 @@ graph TD
 - Git
 - DFINITY SDK for Internet Computer (dfx)
 - Vite for React development
->>>>>>> e0c61ebb534ba38a2aac8f98678e996f48fff2e9
 
-## Installation & Setup
+### Project Setup
 
 ```bash
 # Clone repository
-<<<<<<< HEAD
-git clone https://github.com/DevBigEazi/TicketCityFrontend
-cd TicketCityFrontend
-
-# Install dependencies
-yarn install
-=======
 git clone https://github.com/CityBlockLab/Ticket_City_Frontend
 cd Ticket_City_Frontend
 
 # Install dependencies
 npm install
->>>>>>> e0c61ebb534ba38a2aac8f98678e996f48fff2e9
-
-# Copy environment file contents
-cp .env.example
-.env.local is the original file
 
 # Start development server
-<<<<<<< HEAD
-yarn dev
-```
-
-## React Component Structure
-
-### Event Creation Flow
-
-1. **CreateEventFormComponent**: Handles event input fields and validation.
-2. **EventPreview**: Displays entered event details for review.
-3. **CreateTicketComponent**: Allows organizers to define ticket categories.
-4. **handleSubmit**: Calls smart contract functions (`createEvent` and `createTicket`).
-5. **useMulticall**: Ensures atomic transaction execution.
-6. **EventListComponent**: Fetches and displays created events.
-
-### Ticket Purchase Flow
-
-1. **TicketPurchaseComponent**: Handles user interaction for ticket buying.
-2. **validatePayment**: Verifies ETN transaction.
-3. **MintTicketNFT**: Issues NFT-based tickets upon successful payment.
-4. **updateEventRecords**: Updates event database with new ticket holders.
-
-### Authentication Flow
-
-- **Web2 Auth**: Creates an embedded EVM wallet for users.
-- **Web3 Auth**: Direct wallet connection for guest users.
-
-## Revenue Management
-
-- ETN payments held securely in smart contract.
-- Minimum 60% attendance requirement for revenue release.
-- Automatic or manual revenue release post-event.
-
-## Event Verification
-
-- QR code or wallet authentication.
-- Attendee-controlled attendance marking.
-- Bulk verification support (Future Feature).
-
-## Error Handling
-
-- Comprehensive form validation.
-- Secure API interactions.
-- User-friendly error messages.
-
-## Development Workflow
-
-### Contributing Guidelines
-
-- Use GitHub Issues for tracking.
-- Follow feature-based branch naming (`feature/issue-number-description`).
-- Run tests before submitting PRs&#x20;
-- Provide detailed PR descriptions.
-=======
 npm run dev
 ```
 
@@ -316,34 +226,15 @@ git checkout -b docs/issue-number-description
    - Address review comments
    - Update PR as needed
    - Maintain communication
->>>>>>> e0c61ebb534ba38a2aac8f98678e996f48fff2e9
 
 ### Code Standards
 
-- Maintain clean React component structure.
-- Optimize API calls and contract interactions.
-- Follow best practices for UI/UX consistency.
+- Follow Solidity style guide
+- Use NatSpec comments
+- Implement proper error handling
+- Maintain test coverage
+- Follow gas optimization practices
 
-<<<<<<< HEAD
-## Support & Resources
-
-- **GitHub Issues**: For reporting bugs and requesting features.
-- **Telegram Community**: General discussions and support.
-- **Documentation**: Guides and API references.
-
-For additional support:
-
-1. Check documentation.
-2. Search closed issues.
-3. Join Telegram community.
-4. Contact @DevBigEazi.
-
-## Test Coverage
-
-## License
-
-MIT Licensed
-=======
 ## Frontend Security Considerations
 
 1. **Authentication & Authorization**
@@ -376,6 +267,7 @@ MIT Licensed
 For additional support or questions:
 
 1. Check existing documentation
+
 2. Search closed issues
 3. Join Telegram community
 4. Contact @devbigeazi
@@ -383,4 +275,8 @@ For additional support or questions:
 ## All tests passed
 
 <img width="641" alt="test" src="https://github.com/user-attachments/assets/41e09d25-3162-4012-8b0b-d7a7cfca2677" />
->>>>>>> e0c61ebb534ba38a2aac8f98678e996f48fff2e9
+
+Frontend leveraging ICP
+<img width="960" alt="icp" src="https://github.com/user-attachments/assets/04fa8756-8747-425e-81fd-aaa91d5ea177" />
+
+<img width="960" alt="icp2" src="https://github.com/user-attachments/assets/5e3bedb6-c0fe-4b00-8e06-0c2867b0d2cd" />
