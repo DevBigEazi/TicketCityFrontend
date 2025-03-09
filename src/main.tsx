@@ -11,7 +11,7 @@ createRoot(document.getElementById('root')!).render(
       appId="cm7ggplh602nev98bri6wwd57"
       config={{
         // Display wallet as login methods
-        loginMethods: ['email', 'google', 'wallet'],
+        loginMethods: ['wallet'],
         externalWallets: {
           coinbaseWallet: {
             // Valid connection options include 'all' (default), 'eoaOnly', or 'smartWalletOnly'
