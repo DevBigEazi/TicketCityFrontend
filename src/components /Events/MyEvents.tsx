@@ -5,6 +5,7 @@ import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 import { formatEther } from 'viem';
+import { formatDateMyEvent } from '../../utils/generalUtils';
 
 const MyEventsComponent = () => {
   const navigate = useNavigate();
@@ -52,38 +53,6 @@ const MyEventsComponent = () => {
     canRelease: boolean;
     attendanceRate: number;
   }
-
-  const formatDate = (timestamp: number | string | undefined): string => {
-    if (!timestamp) return 'TBD';
-
-    const eventDate = new Date(Number(timestamp) * 1000);
-
-    // Get today and tomorrow dates for comparison
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Check if date is today or tomorrow
-    let dateText;
-    if (eventDate.toDateString() === today.toDateString()) {
-      dateText = 'Today';
-    } else if (eventDate.toDateString() === tomorrow.toDateString()) {
-      dateText = 'Tomorrow';
-    } else {
-      dateText = eventDate.toLocaleDateString();
-    }
-
-    return (
-      dateText +
-      ' | ' +
-      eventDate.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    );
-  };
 
   // Get ETN Balance
   const getETNBalance = useCallback(async () => {
@@ -284,7 +253,7 @@ const MyEventsComponent = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [walletAddress, publicClient, formatDate]);
+  }, [walletAddress, publicClient, formatDateMyEvent]);
 
   // Fetch events without tickets using the dedicated smart contract function
   const fetchEventsWithoutTickets = useCallback(async () => {
@@ -420,7 +389,7 @@ const MyEventsComponent = () => {
       console.error('Failed to fetch events without tickets:', error);
       setEventsWithoutTickets([]);
     }
-  }, [walletAddress, publicClient, formatDate]);
+  }, [walletAddress, publicClient, formatDateMyEvent]);
 
   // Fetch all event data
   const fetchAllEventData = useCallback(async () => {
