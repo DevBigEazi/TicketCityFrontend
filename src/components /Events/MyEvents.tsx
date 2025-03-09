@@ -1,66 +1,58 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Calendar, Ticket, RefreshCw, QrCode } from 'lucide-react';
-import { EventImg1 } from '../../assets';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 import { formatEther } from 'viem';
+import { formatDateMyEvent } from '../../utils/generalUtils';
 
 const MyEventsComponent = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('upcoming');
-  const [events, setEvents] = useState([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
-  const [eventsWithoutTickets, setEventsWithoutTickets] = useState([]);
+  const [eventsWithoutTickets, setEventsWithoutTickets] = useState<Event[]>([]);
   const [balance, setBalance] = useState('••••');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  console.log(lastUpdated);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     revenuePending: 0,
     refundsIssued: 0,
-  });
+  }) as any[];
   const initialDataLoaded = useRef(false);
 
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  const walletAddress = wallets?.[0]?.address;
+  const walletAddress = wallets?.[0]?.address as `0x${string}`;
   const publicClient = createPublicClientInstance();
 
   // Format date for display - keeping only for backward compatibility
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'TBD';
-
-    const eventDate = new Date(Number(timestamp) * 1000);
-
-    // Get today and tomorrow dates for comparison
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Check if date is today or tomorrow
-    let dateText;
-    if (eventDate.toDateString() === today.toDateString()) {
-      dateText = 'Today';
-    } else if (eventDate.toDateString() === tomorrow.toDateString()) {
-      dateText = 'Tomorrow';
-    } else {
-      dateText = eventDate.toLocaleDateString();
-    }
-
-    return (
-      dateText +
-      ' | ' +
-      eventDate.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    );
-  };
+  interface Event {
+    id: string;
+    title: string;
+    image: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    startTime: string;
+    endTime: string;
+    startTimestamp: number;
+    endTimestamp: number;
+    ticketsSold: number;
+    ticketsTotal: number;
+    ticketsVerified: number;
+    hasEnded: boolean;
+    hasNotStarted: boolean;
+    isLive: boolean;
+    hasTickets: boolean;
+    revenue: number;
+    canRelease: boolean;
+    attendanceRate: number;
+  }
 
   // Get ETN Balance
   const getETNBalance = useCallback(async () => {
@@ -71,7 +63,7 @@ const MyEventsComponent = () => {
 
     try {
       const tokenBalanceWei = await publicClient.getBalance({
-        address: wallets[0].address,
+        address: walletAddress,
       });
 
       const formattedBalance = formatEther(tokenBalanceWei);
@@ -94,12 +86,12 @@ const MyEventsComponent = () => {
 
     try {
       // Use the optimized contract function to get events with tickets
-      const eventsWithTicketIds = await publicClient.readContract({
+      const eventsWithTicketIds = (await publicClient.readContract({
         address: TICKET_CITY_ADDR,
         abi: TICKET_CITY_ABI,
         functionName: 'getEventsWithTicketByUser',
         args: [walletAddress],
-      });
+      })) as unknown[];
 
       console.log('Events with tickets IDs:', eventsWithTicketIds);
 
@@ -108,7 +100,7 @@ const MyEventsComponent = () => {
         setEvents([]);
       } else {
         // Process events with tickets
-        const eventsWithTickets = [];
+        const eventsWithTickets: Event[] = [];
         let totalRevenue = 0;
         let revenuePending = 0;
         let refundsIssued = 0;
@@ -116,7 +108,16 @@ const MyEventsComponent = () => {
         const eventsData = await Promise.all(
           eventsWithTicketIds.map(async (eventId) => {
             try {
-              const eventIdStr = eventId.toString();
+              let eventIdStr: string;
+              if (typeof eventId === 'bigint' || typeof eventId === 'number') {
+                eventIdStr = eventId.toString();
+              } else if (typeof eventId === 'string') {
+                eventIdStr = eventId;
+              } else {
+                // Handle other cases or throw an error
+                throw new Error('eventId is not a valid type');
+              }
+
               const eventData = await publicClient.readContract({
                 address: TICKET_CITY_ADDR,
                 abi: TICKET_CITY_ABI,
@@ -133,18 +134,20 @@ const MyEventsComponent = () => {
               });
 
               const now = Date.now();
-              const startTimestamp = Number(eventData.startDate) * 1000;
-              const endTimestamp = Number(eventData.endDate) * 1000;
+              const startTimestamp = Number((eventData as any).startDate) * 1000;
+              const endTimestamp = Number((eventData as any).endDate) * 1000;
 
               const hasEnded = endTimestamp < now;
               const hasNotStarted = startTimestamp > now;
               const isLive = !hasEnded && !hasNotStarted;
 
               // Process the image URL
-              let imageUrl = eventData.imageUri || EventImg1;
+              let imageUrl = (eventData as any).imageUri || '/placeholder-event.jpg';
 
               // Calculate revenue info
-              const eventRevenue = revenueDetails[2] ? Number(revenueDetails[2]) / 1e18 : 0;
+              const eventRevenue = (revenueDetails as any[])[2]
+                ? Number((revenueDetails as any[])[2]) / 1e18
+                : 0;
 
               if (hasEnded) {
                 totalRevenue += eventRevenue;
@@ -195,25 +198,25 @@ const MyEventsComponent = () => {
 
               const formattedEvent = {
                 id: eventIdStr,
-                title: eventData.title || 'Untitled Event',
+                title: (eventData as any).title || 'Untitled Event',
                 image: imageUrl,
-                location: eventData.location || 'TBD',
+                location: (eventData as any).location || 'TBD',
                 startDate: formattedStartDate,
                 endDate: formattedEndDate,
                 startTime: formattedStartTime,
                 endTime: formattedEndTime,
                 startTimestamp: startTimestamp,
                 endTimestamp: endTimestamp,
-                ticketsSold: Number(eventData.userRegCount),
-                ticketsTotal: Number(eventData.expectedAttendees),
-                ticketsVerified: Number(eventData.verifiedAttendeesCount),
+                ticketsSold: Number((eventData as any).userRegCount),
+                ticketsTotal: Number((eventData as any).expectedAttendees),
+                ticketsVerified: Number((eventData as any).verifiedAttendeesCount),
                 hasEnded,
                 hasNotStarted,
                 isLive,
                 hasTickets: true,
                 revenue: eventRevenue,
-                canRelease: revenueDetails[0],
-                attendanceRate: revenueDetails[1],
+                canRelease: (revenueDetails as any[])[0],
+                attendanceRate: (revenueDetails as any[])[1],
               };
 
               // Add event to the events with tickets list
@@ -250,7 +253,7 @@ const MyEventsComponent = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [walletAddress, publicClient, formatDate]);
+  }, [walletAddress, publicClient, formatDateMyEvent]);
 
   // Fetch events without tickets using the dedicated smart contract function
   const fetchEventsWithoutTickets = useCallback(async () => {
@@ -268,9 +271,10 @@ const MyEventsComponent = () => {
         args: [walletAddress],
       });
 
-      console.log('Events without tickets IDs:', eventsWithoutTicketIds);
+      const eventsWithoutTicketIdsArray: any[] = eventsWithoutTicketIds as any[];
+      console.log('Events without tickets IDs:', eventsWithoutTicketIdsArray);
 
-      if (!eventsWithoutTicketIds || eventsWithoutTicketIds.length === 0) {
+      if (!Array.isArray(eventsWithoutTicketIds) || eventsWithoutTicketIds.length === 0) {
         console.log('No events without tickets found');
         setEventsWithoutTickets([]);
         return;
@@ -289,15 +293,15 @@ const MyEventsComponent = () => {
             });
 
             const now = Date.now();
-            const startTimestamp = Number(eventData.startDate) * 1000;
-            const endTimestamp = Number(eventData.endDate) * 1000;
+            const startTimestamp = Number((eventData as any).startDate) * 1000;
+            const endTimestamp = Number((eventData as any).endDate) * 1000;
 
             const hasEnded = endTimestamp < now;
             const hasNotStarted = startTimestamp > now;
             const isLive = !hasEnded && !hasNotStarted;
 
             // Process the image URL
-            let imageUrl = eventData.imageUri || EventImg1;
+            let imageUrl = (eventData as any).imageUri || '/placeholder-event.jpg';
 
             // Format start and end times
             const startDate = new Date(startTimestamp);
@@ -340,23 +344,27 @@ const MyEventsComponent = () => {
               minute: '2-digit',
             });
 
-            const formattedEvent = {
+            const formattedEvent: Event = {
               id: eventIdStr,
-              title: eventData.title || 'Untitled Event',
+              title: (eventData as any).title || 'Untitled Event',
               image: imageUrl,
-              location: eventData.location || 'TBD',
+              location: (eventData as any).location || 'TBD',
               startDate: formattedStartDate,
               endDate: formattedEndDate,
               startTime: formattedStartTime,
               endTime: formattedEndTime,
               startTimestamp: startTimestamp,
               endTimestamp: endTimestamp,
-              ticketsTotal: Number(eventData.expectedAttendees),
+              ticketsSold: 0, // Default value
+              ticketsTotal: Number((eventData as any).expectedAttendees),
+              ticketsVerified: 0, // Default value
               hasEnded,
               hasNotStarted,
               isLive,
               hasTickets: false,
-              ticketType: eventData.ticketType.toString(),
+              revenue: 0, // Default value
+              canRelease: false, // Default value
+              attendanceRate: 0, // Default value
             };
 
             return formattedEvent;
@@ -381,7 +389,7 @@ const MyEventsComponent = () => {
       console.error('Failed to fetch events without tickets:', error);
       setEventsWithoutTickets([]);
     }
-  }, [walletAddress, publicClient, formatDate]);
+  }, [walletAddress, publicClient, formatDateMyEvent]);
 
   // Fetch all event data
   const fetchAllEventData = useCallback(async () => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle } from 'lucide-react';
-import { useWallets } from '@privy-io/react-auth';
+// import { useWallets } from '@privy-io/react-auth';
 import {
   createPublicClientInstance,
   createWalletClientInstance,
@@ -21,20 +21,30 @@ const PaidTicketCategory = {
   VIP: 2,
 };
 
-const PurchaseTicketSection = ({ 
-  event, 
-  authenticated, 
-  login, 
-  wallets, 
-  balance, 
+interface PurchaseTicketSectionProps {
+  event: any;
+  authenticated: boolean;
+  login: () => void;
+  wallets: any[];
+  balance: string;
+  refreshEventDetails: () => Promise<void>;
+  refreshBalance?: () => Promise<void>;
+}
+
+const PurchaseTicketSection = ({
+  event,
+  authenticated,
+  login,
+  wallets,
+  balance,
   refreshEventDetails,
-  refreshBalance
-}) => {
+  refreshBalance,
+}: PurchaseTicketSectionProps) => {
   const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
-  const [purchaseError, setPurchaseError] = useState(null);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
-  
+
   const publicClient = createPublicClientInstance();
 
   // Determine what options should be available
@@ -136,7 +146,7 @@ const PurchaseTicketSection = ({
           setTimeout(() => {
             setPurchaseSuccess(false);
           }, 5000);
-          
+
           // Refresh event details
           await refreshEventDetails();
           // Update balance
@@ -149,9 +159,10 @@ const PurchaseTicketSection = ({
       } catch (txError) {
         // Check if user rejected the transaction in their wallet
         if (
-          txError.message.includes('rejected') ||
-          txError.message.includes('denied') ||
-          txError.message.includes('cancelled')
+          txError instanceof Error &&
+          (txError.message.includes('rejected') ||
+            txError.message.includes('denied') ||
+            txError.message.includes('cancelled'))
         ) {
           throw new Error('Transaction was rejected in wallet');
         } else {
@@ -159,8 +170,12 @@ const PurchaseTicketSection = ({
         }
       }
     } catch (error) {
-      console.error("Purchase error:", error);
-      setPurchaseError(`Failed to purchase ticket: ${error.message || 'Unknown error'}`);
+      console.error('Purchase error:', error);
+      if (error instanceof Error) {
+        setPurchaseError(`Failed to purchase ticket: ${error.message || 'Unknown error'}`);
+      } else {
+        setPurchaseError('Failed to purchase ticket: Unknown error');
+      }
     } finally {
       // Ensure the purchasing state is reset even if there's an error
       setIsPurchasing(false);
@@ -168,7 +183,7 @@ const PurchaseTicketSection = ({
   };
 
   // Ticket Type Selector Component
-  const TicketTypeSelector = () => {    
+  const TicketTypeSelector = () => {
     return (
       <div>
         <label className="font-inter text-medium text-white block mb-2">Choose Ticket Type:</label>
@@ -211,7 +226,7 @@ const PurchaseTicketSection = ({
         <p className="font-inter text-medium text-white mb-4">
           You need to connect your wallet to purchase a ticket for this event.
         </p>
-        <button 
+        <button
           onClick={login}
           className="w-full bg-primary rounded-lg py-3 font-poppins text-[18px] leading-[27px] tracking-wider text-white"
         >
@@ -226,7 +241,7 @@ const PurchaseTicketSection = ({
       <h2 className="font-poppins text-large text-white flex items-center gap-2 mb-4">
         🎟️ Purchase Ticket
       </h2>
-      
+
       {/* Success message */}
       {purchaseSuccess && (
         <div className="bg-green-900/30 p-4 rounded-lg flex items-center gap-2 mb-4">
@@ -248,9 +263,7 @@ const PurchaseTicketSection = ({
       <div className="space-y-4">
         {/* Balance info */}
         <div className="bg-slate-800/50 p-3 rounded-lg">
-          <p className="font-inter text-medium text-white">
-            Your Balance: {balance} ETN
-          </p>
+          <p className="font-inter text-medium text-white">Your Balance: {balance} ETN</p>
         </div>
 
         {/* Ticket selector for paid events */}
@@ -259,13 +272,14 @@ const PurchaseTicketSection = ({
         {/* Price display */}
         <div className="bg-primary/10 p-3 rounded-lg">
           <p className="font-inter text-medium text-white">
-            Price: {isPaidEvent ? (
-              selectedTicketType === 'REGULAR' && hasRegularOption ? 
-                `${formatEther(event.ticketsData.regularTicketFee)} ETN` : 
-              selectedTicketType === 'VIP' && hasVipOption ? 
-                `${formatEther(event.ticketsData.vipTicketFee)} ETN` : 
-                'Ticket type not available'
-            ) : 'Free'}
+            Price:{' '}
+            {isPaidEvent
+              ? selectedTicketType === 'REGULAR' && hasRegularOption
+                ? `${formatEther(event.ticketsData.regularTicketFee)} ETN`
+                : selectedTicketType === 'VIP' && hasVipOption
+                  ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
+                  : 'Ticket type not available'
+              : 'Free'}
           </p>
         </div>
 

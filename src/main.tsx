@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { baseSepolia } from 'viem/chains';
+import { electroneum } from 'viem/chains';
+import images from './constant/images.ts';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -11,19 +12,20 @@ createRoot(document.getElementById('root')!).render(
       appId="cm7ggplh602nev98bri6wwd57"
       config={{
         // Display wallet as login methods
-        loginMethods: ['email', 'google', 'wallet'],
+        loginMethods: ['wallet'],
         externalWallets: {
           coinbaseWallet: {
             // Valid connection options include 'all' (default), 'eoaOnly', or 'smartWalletOnly'
             connectionOptions: 'all',
           },
         },
-        supportedChains: [baseSepolia],
+        supportedChains: [electroneum],
         appearance: {
           accentColor: '#FF8A00',
           theme: '#090014',
+          logo: `${images.TicketCityLogo}`,
+          landingHeader: 'Make sure you switch to Electroneum network',
           showWalletLoginFirst: false,
-          logo: '',
           walletChainType: 'ethereum-only',
           walletList: [
             'detected_ethereum_wallets',

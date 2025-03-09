@@ -1,17 +1,17 @@
 import { createWalletClient, createPublicClient, custom, http, fallback } from 'viem';
-import { electroneumTestnet } from 'viem/chains';
+import { electroneum } from 'viem/chains';
 
-export const TICKET_CITY_ADDR = '0xB248609eCBf4300754a6c6D238B217957eAf16a4';
+export const TICKET_CITY_ADDR = '0x123bFf8D754b29772E1EfAD5B075F55600577DcD';
 
 // Primary and fallback RPC URLs
 const PRIMARY_RPC =
-  import.meta.env.VITE_ELECTRONEUM_TESTNET_RPC || 'https://rpc.ankr.com/electroneum_testnet';
-const FALLBACK_RPC = 'https://testnet-rpc.electroneum.com'; // Official testnet RPC as fallback
+  import.meta.env.VITE_ELECTRONEUM_TESTNET_RPC || 'https://rpc.ankr.com/electroneum';
+const FALLBACK_RPC = 'https://rpc.electroneum.com'; // Official testnet RPC as fallback
 
 export const createWalletClientInstance = (provider: any) => {
   try {
     return createWalletClient({
-      chain: electroneumTestnet,
+      chain: electroneum,
       transport: custom(provider),
     });
   } catch (error) {
@@ -24,7 +24,7 @@ export const createPublicClientInstance = () => {
   try {
     // Using fallback to try multiple RPC providers if one fails
     return createPublicClient({
-      chain: electroneumTestnet,
+      chain: electroneum,
       transport: fallback([http(PRIMARY_RPC), http(FALLBACK_RPC)]),
     });
   } catch (error) {

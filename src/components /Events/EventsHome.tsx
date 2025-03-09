@@ -1,19 +1,89 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Copy, CheckCircle, Clock, Wallet } from 'lucide-react';
 import EventCard from './EventsCard';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 import { encodeFunctionData, formatEther } from 'viem';
+import { formatDate } from '../../utils/generalUtils';
+
+// Define interfaces for the event data structure
+interface EventData {
+  title: string;
+  desc: string;
+  location: string;
+  startDate: bigint;
+  endDate: bigint;
+  ticketType: number;
+  imageUri: string;
+  organiser: string;
+  userRegCount: bigint;
+  expectedAttendees: bigint;
+  verifiedAttendeesCount: bigint;
+  // Add other properties as needed
+}
+
+interface EventTickets {
+  regularTicketFee: bigint;
+  vipTicketFee: bigint;
+  // Add other properties as needed
+}
+
+// Define interface for event objects in your state
+interface Event {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  location: string;
+  date: string;
+  endDate: string;
+  price: {
+    regular: number;
+    vip: number;
+  };
+  image: string;
+  organiser: string;
+  attendees: {
+    registered: number;
+    expected: number;
+    verified: number;
+  };
+  hasEnded: boolean;
+  hasNotStarted: boolean;
+  isLive: boolean;
+  isVerified: boolean;
+  hasTicket: boolean;
+  ticketType: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  rawData: EventData;
+  remainingTickets: number;
+  hasTicketCreated: boolean;
+  hasRegularTicket: boolean;
+  hasVIPTicket: boolean;
+  // Add the missing properties required by UIEvent
+  coordinates: { lat: number; lng: number } | null;
+  distance: number | null;
+}
+
+interface TicketDetails {
+  eventIds: bigint[];
+  ticketTypes: string[];
+}
+
+interface TicketsMap {
+  [key: string]: string;
+}
 
 const EventsDashboardHome = () => {
-  const [viewMode] = useState('grid');
-  const [events, setEvents] = useState([]);
+  const [viewMode] = useState<'grid' | 'list'>('grid');
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [tokenBalance, setTokenBalance] = useState('Loading...');
-  const [userTickets, setUserTickets] = useState({});
+  const [userTickets, setUserTickets] = useState<TicketsMap>({});
   const [copyStatus, setCopyStatus] = useState(false);
   const [ticketStats, setTicketStats] = useState({
     total: 0,
@@ -21,57 +91,34 @@ const EventsDashboardHome = () => {
     pending: 0,
   });
   const [checkingIn, setCheckingIn] = useState(false);
-  const [checkInStatus, setCheckInStatus] = useState({ eventId: null, status: '', message: '' });
+  const [checkInStatus, setCheckInStatus] = useState<{
+    eventId: string | null;
+    status: string;
+    message: string;
+  }>({ eventId: null, status: '', message: '' });
+
+  // Add a ref to track if we've performed the initial fetch
+  const initialFetchRef = useRef(false);
 
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  const walletAddress = wallets?.[0]?.address;
   const wallet = wallets?.[0];
 
   const publicClient = createPublicClientInstance();
 
-  // Helper function to format Unix timestamp to readable date
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return 'TBD';
-
-    const eventDate = new Date(Number(timestamp) * 1000);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Reset hours to compare just the dates
-    const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const tomorrowDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-
-    // Format the time portion
-    const timeString = eventDate.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    // Check if event is today or tomorrow
-    if (eventDay.getTime() === todayDay.getTime()) {
-      return `Today | ${timeString}`;
-    } else if (eventDay.getTime() === tomorrowDay.getTime()) {
-      return `Tomorrow | ${timeString}`;
-    } else {
-      // For other dates, use the standard format
-      return `${eventDate.toLocaleDateString()} | ${timeString}`;
-    }
-  };
-
-  // Get ETN Balance
+  // Get ETN Balance - Move walletAddress inside the callback
   const getETNBalance = useCallback(async () => {
-    if (!wallets || !wallets.length || !wallets[0]?.address) {
+    const currentWalletAddress = wallets?.[0]?.address as `0x${string}`;
+
+    if (!wallets || !wallets.length || !currentWalletAddress) {
       console.log('No wallet available yet, skipping balance fetch');
       return;
     }
 
     try {
       const tokenBalanceWei = await publicClient.getBalance({
-        address: wallets[0].address,
+        address: currentWalletAddress,
       });
 
       const formattedBalance = formatEther(tokenBalanceWei);
@@ -84,9 +131,10 @@ const EventsDashboardHome = () => {
 
   // Copy wallet address to clipboard
   const copyWalletAddress = async () => {
-    if (walletAddress) {
+    const currentWalletAddress = wallets?.[0]?.address as `0x${string}`;
+    if (currentWalletAddress) {
       try {
-        await navigator.clipboard.writeText(walletAddress);
+        await navigator.clipboard.writeText(currentWalletAddress);
         setCopyStatus(true);
         setTimeout(() => setCopyStatus(false), 2000);
       } catch (err) {
@@ -95,9 +143,11 @@ const EventsDashboardHome = () => {
     }
   };
 
-  // Main data fetching function - using allEventsRegisteredForByAUser
+  // Main data fetching function - Move walletAddress inside the callback
   const fetchUserData = useCallback(async () => {
-    if (!walletAddress) {
+    const currentWalletAddress = wallets?.[0]?.address as `0x${string}`;
+
+    if (!currentWalletAddress) {
       console.log('No wallet address available yet, skipping data fetch');
       setLoading(false);
       return;
@@ -107,12 +157,12 @@ const EventsDashboardHome = () => {
 
     try {
       // Get all events the user has registered for
-      const registeredEventIds = await publicClient.readContract({
+      const registeredEventIds = (await publicClient.readContract({
         address: TICKET_CITY_ADDR,
         abi: TICKET_CITY_ABI,
         functionName: 'allEventsRegisteredForByAUser',
-        args: [walletAddress],
-      });
+        args: [currentWalletAddress],
+      })) as bigint[];
 
       console.log('User registered event ids:', registeredEventIds);
       console.log('User registered events count:', registeredEventIds?.length || 0);
@@ -126,8 +176,8 @@ const EventsDashboardHome = () => {
       }
 
       // Check verification status for each registered event
-      const ticketsMap = {};
-      const verifiedMap = {};
+      const ticketsMap: TicketsMap = {};
+      const verifiedMap: Record<string, boolean> = {};
 
       // Batch check verification status for each event
       await Promise.all(
@@ -141,9 +191,9 @@ const EventsDashboardHome = () => {
                 address: TICKET_CITY_ADDR,
                 abi: TICKET_CITY_ABI,
                 functionName: 'isVerified',
-                args: [walletAddress, eventId],
+                args: [currentWalletAddress, eventId],
               });
-              verifiedMap[eventIdStr] = isVerified;
+              verifiedMap[eventIdStr] = Boolean(isVerified);
             } catch (error) {
               console.error(`Error checking verification for event ${eventIdStr}:`, error);
               verifiedMap[eventIdStr] = false;
@@ -156,19 +206,25 @@ const EventsDashboardHome = () => {
 
       // Get ticket types for the registered events
       try {
-        const ticketDetails = await publicClient.readContract({
+        const ticketDetails = (await publicClient.readContract({
           address: TICKET_CITY_ADDR,
           abi: TICKET_CITY_ABI,
           functionName: 'getMyTickets',
           args: [],
-        });
+        })) as TicketDetails;
 
-        if (ticketDetails && Array.isArray(ticketDetails) && ticketDetails.length >= 3) {
-          const [eventIds, ticketTypes] = ticketDetails;
-
-          eventIds.forEach((eventId, index) => {
+        if (
+          ticketDetails &&
+          ticketDetails.eventIds &&
+          Array.isArray(ticketDetails.eventIds) &&
+          ticketDetails.ticketTypes &&
+          Array.isArray(ticketDetails.ticketTypes)
+        ) {
+          ticketDetails.eventIds.forEach((eventId, index) => {
             const eventIdStr = eventId.toString();
-            ticketsMap[eventIdStr] = ticketTypes[index];
+            if (index < ticketDetails.ticketTypes.length) {
+              ticketsMap[eventIdStr] = ticketDetails.ticketTypes[index];
+            }
           });
         }
       } catch (error) {
@@ -179,15 +235,15 @@ const EventsDashboardHome = () => {
 
       // Fetch details for each registered event
       const eventsData = await Promise.all(
-        registeredEventIds.map(async (eventId) => {
+        registeredEventIds.map(async (eventId): Promise<Event | null> => {
           try {
             const eventIdStr = eventId.toString();
-            const eventData = await publicClient.readContract({
+            const eventData = (await publicClient.readContract({
               address: TICKET_CITY_ADDR,
               abi: TICKET_CITY_ABI,
               functionName: 'getEvent',
               args: [eventId],
-            });
+            })) as EventData;
 
             // Classify event status based on current time
             const now = Date.now();
@@ -211,27 +267,26 @@ const EventsDashboardHome = () => {
             let regularPrice = 0;
             let vipPrice = 0;
             let ticketType = ticketsMap[eventIdStr] || 'Regular';
+            let hasRegularTicket = false;
+            let hasVIPTicket = false;
 
             try {
-              const eventTickets = await publicClient.readContract({
+              const eventTickets = (await publicClient.readContract({
                 address: TICKET_CITY_ADDR,
                 abi: TICKET_CITY_ABI,
                 functionName: 'eventTickets',
                 args: [eventId],
-              });
+              })) as EventTickets;
 
               if (eventTickets) {
-                if (Array.isArray(eventTickets)) {
-                  regularPrice = eventTickets[2] ? Number(eventTickets[2]) / 1e18 : 0;
-                  vipPrice = eventTickets[3] ? Number(eventTickets[3]) / 1e18 : 0;
-                } else {
-                  regularPrice = eventTickets.regularTicketFee
-                    ? Number(eventTickets.regularTicketFee) / 1e18
-                    : 0;
-                  vipPrice = eventTickets.vipTicketFee
-                    ? Number(eventTickets.vipTicketFee) / 1e18
-                    : 0;
-                }
+                regularPrice = eventTickets.regularTicketFee
+                  ? Number(eventTickets.regularTicketFee) / 1e18
+                  : 0;
+                vipPrice = eventTickets.vipTicketFee ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
+
+                // Determine if ticket types are available
+                hasRegularTicket = regularPrice > 0;
+                hasVIPTicket = vipPrice > 0;
               }
             } catch (error) {
               console.error(`Error fetching ticket details for event ${eventId}:`, error);
@@ -240,6 +295,11 @@ const EventsDashboardHome = () => {
             // Process the image URL
             let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
 
+            // Calculate remaining tickets
+            const remainingTickets =
+              Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
+
+            // Create an event object with all required properties
             return {
               id: eventIdStr,
               type: Number(eventData.ticketType) === 0 ? 'Free' : ticketType,
@@ -268,6 +328,13 @@ const EventsDashboardHome = () => {
               startTimestamp,
               endTimestamp,
               rawData: eventData,
+              remainingTickets,
+              hasTicketCreated: true, // Since the user has registered, tickets were created
+              hasRegularTicket,
+              hasVIPTicket,
+              // Add the properties required by UIEvent
+              coordinates: null, // We don't have coordinates in this context
+              distance: null, // We don't have distance in this context
             };
           } catch (error) {
             console.error(`Error fetching event ${eventId}:`, error);
@@ -276,8 +343,8 @@ const EventsDashboardHome = () => {
         }),
       );
 
-      // Filter out null responses
-      const formattedEvents = eventsData.filter((event) => event !== null);
+      // Filter out null responses with a type predicate to help TypeScript understand
+      const formattedEvents: Event[] = eventsData.filter((event): event is Event => event !== null);
       console.log('Successfully fetched', formattedEvents.length, 'events');
 
       // Update ticket stats
@@ -288,34 +355,49 @@ const EventsDashboardHome = () => {
         pending: formattedEvents.length - checkedIn,
       });
 
+      // Compare new events with old events to avoid unnecessary updates
+      const oldEventIds = events
+        .map((e) => e.id)
+        .sort()
+        .join(',');
+      const newEventIds = formattedEvents
+        .map((e) => e.id)
+        .sort()
+        .join(',');
+
       // Store all events in one array but with status flags
       setEvents(formattedEvents);
       console.log(formattedEvents);
 
-      // Update timestamp
-      setLastUpdated(new Date());
+      // Only update timestamp if events have changed
+      if (oldEventIds !== newEventIds) {
+        setLastUpdated(new Date());
+      }
     } catch (error) {
       console.error('Failed to fetch user data:', error);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [walletAddress, publicClient]);
+  }, [publicClient, formatDate, events]);
 
-  // Initial data fetch on wallet connection
+  // Initial data fetch on wallet connection - use the ref to prevent loops
   useEffect(() => {
     // Only fetch if authenticated and wallet is connected
     if (authenticated && wallets?.length > 0) {
-      console.log('Wallet connected, fetching initial data...');
-      getETNBalance();
-      fetchUserData();
+      if (!initialFetchRef.current) {
+        console.log('Wallet connected, fetching initial data...');
+        initialFetchRef.current = true;
+        getETNBalance();
+        fetchUserData();
+      }
     } else {
+      // Reset the ref if wallet disconnects
+      initialFetchRef.current = false;
       setTokenBalance('Connect Wallet');
       setLoading(false);
     }
-    // Note: getETNBalance and fetchUserData are created with useCallback so they won't
-    // cause infinite loops, but we exclude them from dependencies to be safe
-  }, [authenticated, wallets?.length]);
+  }, [authenticated, wallets?.length, getETNBalance, fetchUserData]);
 
   // Manual refresh handler
   const handleManualRefresh = () => {
@@ -329,7 +411,7 @@ const EventsDashboardHome = () => {
   };
 
   // Format wallet address for display
-  const formatWalletAddress = (address) => {
+  const formatWalletAddress = (address: string): string => {
     if (!address) return 'Not Connected';
     return `${address.substring(0, 8)}...${address.substring(address.length - 6)}`;
   };
@@ -362,8 +444,10 @@ const EventsDashboardHome = () => {
   };
 
   // Handle check-in process
-  const handleCheckIn = async (eventId) => {
-    if (!wallet || checkingIn) return;
+  const handleCheckIn = async (eventId: string) => {
+    const currentWalletAddress = wallets?.[0]?.address as `0x${string}`;
+
+    if (!wallet || checkingIn || !currentWalletAddress) return;
 
     setCheckingIn(true);
     setCheckInStatus({
@@ -381,16 +465,16 @@ const EventsDashboardHome = () => {
       const verifyAttendanceData = encodeFunctionData({
         abi: TICKET_CITY_ABI,
         functionName: 'verifyAttendance',
-        args: [eventId],
+        args: [BigInt(eventId)],
       });
 
       const eventTxHash = await provider.request({
         method: 'eth_sendTransaction',
-        params: [{ from: walletAddress, to: TICKET_CITY_ADDR, data: verifyAttendanceData }],
+        params: [{ from: currentWalletAddress, to: TICKET_CITY_ADDR, data: verifyAttendanceData }],
       });
 
       // Wait for transaction receipt
-      const eventReceipt = await waitForReceipt(provider, eventTxHash);
+      await waitForReceipt(provider, eventTxHash);
 
       setCheckInStatus({
         eventId: eventId,
@@ -400,7 +484,7 @@ const EventsDashboardHome = () => {
 
       // Wait for the transaction to be confirmed
       const receipt = await publicClient.waitForTransactionReceipt({
-        hash: eventTxHash, // Fixed: use eventTxHash instead of undefined hash variable
+        hash: eventTxHash as `0x${string}`,
       });
 
       if (receipt.status === 'success') {
@@ -432,7 +516,7 @@ const EventsDashboardHome = () => {
       } else {
         throw new Error('Transaction failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Check-in failed:', error);
       setCheckInStatus({
         eventId: eventId,
@@ -519,6 +603,9 @@ const EventsDashboardHome = () => {
     );
   };
 
+  // Get the current wallet address for display
+  const currentWalletAddress = (wallets?.[0]?.address as `0x${string}`) || '';
+
   return (
     <div className="p-6">
       {/* Render check-in notification */}
@@ -547,7 +634,7 @@ const EventsDashboardHome = () => {
         <div className="shadow-button-inset border border-borderStroke rounded-xl p-6 flex-1 backdrop-blur-sm">
           <h3 className="text-white text-xl font-semibold mb-4">Wallet Address</h3>
           <div className="flex items-center gap-2">
-            <p className="text-emerald-400 text-lg">{formatWalletAddress(walletAddress || '')}</p>
+            <p className="text-emerald-400 text-lg">{formatWalletAddress(currentWalletAddress)}</p>
             <button
               onClick={copyWalletAddress}
               className="text-textGray hover:text-white p-1 rounded transition-colors"

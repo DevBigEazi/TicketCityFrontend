@@ -1,0 +1,35 @@
+{
+  "canisters": {
+    "frontend": {
+      "frontend": {
+        "entrypoint": "src/index.html"
+      },
+      "source": ["dist"],
+      "type": "assets",
+      "declarations": {
+        "output": "declarations"
+      },
+      "build": ["npm run build"],
+      "dependencies": [],
+      "asset_paths": ["./dist"],
+      "init_arguments": ["[]"],
+      "assets": {
+        "source": ["dist"],
+        "headers": [
+          {
+            "source": "**/*",
+            "headers": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "X-Content-Type-Options", "value": "nosniff" }
+            ]
+          },
+          {
+            "source": "**/*.csv",
+            "headers": [{ "name": "Content-Type", "value": "text/csv" }]
+          }
+        ],
+        "fallback": "index.html"
+      }
+    }
+  }
+}
