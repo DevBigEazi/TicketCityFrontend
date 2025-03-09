@@ -977,7 +977,7 @@ const EventDetails = () => {
       <div className="max-w-[80%] mx-auto py-8">
         {/* Back Button */}
         <button
-          onClick={() => navigate('/my-events')}
+          onClick={() => navigate('/explore')}
           className="flex items-center gap-2 mb-8 hover:opacity-80"
         >
           <ArrowLeft className="w-5 h-5 text-white" />

@@ -5,6 +5,7 @@ import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 import { encodeFunctionData, formatEther } from 'viem';
+import { formatDate } from '../../utils/generalUtils';
 
 // Define interfaces for the event data structure
 interface EventData {
@@ -102,42 +103,9 @@ const EventsDashboardHome = () => {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  // Remove this top-level variable - it's causing rerenders
-  // const walletAddress = wallets?.[0]?.address as `0x${string}`;
   const wallet = wallets?.[0];
 
   const publicClient = createPublicClientInstance();
-
-  // Helper function to format Unix timestamp to readable date
-  const formatDate = useCallback((timestamp: bigint | string | number | undefined): string => {
-    if (!timestamp) return 'TBD';
-
-    const eventDate = new Date(Number(timestamp) * 1000);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Reset hours to compare just the dates
-    const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const tomorrowDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
-
-    // Format the time portion
-    const timeString = eventDate.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    // Check if event is today or tomorrow
-    if (eventDay.getTime() === todayDay.getTime()) {
-      return `Today | ${timeString}`;
-    } else if (eventDay.getTime() === tomorrowDay.getTime()) {
-      return `Tomorrow | ${timeString}`;
-    } else {
-      // For other dates, use the standard format
-      return `${eventDate.toLocaleDateString()} | ${timeString}`;
-    }
-  }, []);
 
   // Get ETN Balance - Move walletAddress inside the callback
   const getETNBalance = useCallback(async () => {
