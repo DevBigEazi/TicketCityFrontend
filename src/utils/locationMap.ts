@@ -45,7 +45,7 @@ export const locationMap: { [key: string]: { lat: number; lng: number } } = {
   prague: { lat: 50.0755, lng: 14.4378 },
 
   // Asian cities
-  'hong kong': { lat: 22.3193, lng: 114.1694 },
+  'hongkong': { lat: 22.3193, lng: 114.1694 },
   bangkok: { lat: 13.7563, lng: 100.5018 },
   mumbai: { lat: 19.076, lng: 72.8777 },
   seoul: { lat: 37.5665, lng: 126.978 },
