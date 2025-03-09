@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import ExploreEvents from './Pages /EventsExpore';
 import CreateEventForm from './Pages /CreateEventsForm';
 import EventPreview from './Pages /EventsPreview';

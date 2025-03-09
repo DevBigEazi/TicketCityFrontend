@@ -1,6 +1,9 @@
-# Ticket City - Technical Documentation
+# Ticket City - Frontend Documentation
 
-'Ticket_City contract successfully deployed to': ''
+'Ticket_City frontend successfully deployed to ICP canister local network': 'bkyz2-fmaaa-aaaaa-qaaaq-cai'.
+
+'Ticket_City smart contract successfully deployed to Electroneum mainnetwork': 'bkyz2-fmaaa-aaaaa-qaaaq-cai'.
+
 
 ## Smart Contract Architecture
 
@@ -95,22 +98,23 @@ graph TD
 ### Prerequisites
 
 - Node.js (v16 or higher)
-- npm or yarn
+- npm
 - Git
-- Alchemy API key for Electroneum Testnet access
+- DFINITY SDK for Internet Computer (dfx)
+- Vite for React development
 
 ### Project Setup
 
 ```bash
 # Clone repository
-git clone https://github.com/CityBlockLab/Ticket_City_Smart_Contract
-cd Ticket_City_Smart_Contract
+git clone https://github.com/CityBlockLab/Ticket_City_Frontend
+cd Ticket_City_Frontend
 
 # Install dependencies
-yarn
+npm install
 
-# Copy environment file
-check hardhat config file...
+# Start development server
+npm run dev
 ```
 
 ## Development Workflow
@@ -118,15 +122,61 @@ check hardhat config file...
 ### Common Commands
 
 ```bash
-# Compile contracts
-npx hardhat compile
+# Build for production
+npm run build
 
-# Clean artifacts
-npx hardhat clean
+# Preview production build
+npm run preview
 
-# Run local node
-npx hardhat node
+# Deploy to ICP
+dfx deploy
 ```
+
+## Deployment Information
+
+### Frontend Deployment on Internet Computer
+
+The React frontend application is deployed as a canister on the Internet Computer Protocol (ICP) local development environment:
+
+- Module hash: `865eb25df5a6d857147e078bb33c727797957247f7af2635846d65c5397b36a6`
+- Frontend canister ID: `bkyz2-fmaaa-aaaaa-qaaaq-cai`
+- Environment: Local development
+
+#### Local Development URLs
+
+- **Recommended**: http://bkyz2-fmaaa-aaaaa-qaaaq-cai.localhost:4943/
+- Legacy: http://127.0.0.1:4943/?canisterId=bkyz2-fmaaa-aaaaa-qaaaq-cai
+
+#### ICP Deployment Commands
+
+```bash
+# Start local ICP environment
+dfx start --background
+
+# Deploy to local environment
+dfx deploy
+
+# Deploy to mainnet
+dfx deploy --network ic
+
+# Check canister status
+dfx canister status frontend
+```
+
+### ICP Security Notes
+
+The project currently does not define a security policy for assets on the Internet Computer Protocol. It is recommended to define a security policy in `.ic-assets.json5`, for example:
+
+```json
+[
+  {
+    "match": "**/*",
+    "security_policy": "standard"
+  }
+]
+```
+
+To disable the policy warning, define `"disable_security_policy_warning": true` in `.ic-assets.json5`.
 
 ## Contributing Guidelines
 
@@ -186,25 +236,25 @@ git checkout -b docs/issue-number-description
 - Maintain test coverage
 - Follow gas optimization practices
 
-## Security Considerations
+## Frontend Security Considerations
 
-1. **Access Control**
+1. **Authentication & Authorization**
 
-   - Implement role-based access
-   - Use OpenZeppelin's Ownable where appropriate
-   - Validate all inputs
+   - Implement secure authentication flows
+   - Use proper authorization checks
+   - Validate user inputs client-side and server-side
 
-2. **Payment Handling**
+2. **Data Protection**
 
-   - Use pull over push payments
-   - Implement reentrancy guards
-   - Handle edge cases
+   - Encrypt sensitive data
+   - Implement proper session management
+   - Use secure communication (HTTPS)
 
-3. **Smart Contract Security**
-   - Follow SCSVS guidelines
-   - Implement emergency stops
-   - Document assumptions
-   - Consider gas limitations
+3. **ICP Canister Security**
+   - Follow ICP security best practices
+   - Implement proper canister access controls
+   - Regularly update dependencies
+   - Test for common web vulnerabilities
 
 ## Support and Resources
 
@@ -212,6 +262,8 @@ git checkout -b docs/issue-number-description
 - Telegram Community: General discussion and support
 - Documentation: Comprehensive guides and references
 - Security: Private disclosure process for vulnerabilities
+- ICP Network Status: Check the Internet Computer Protocol status at https://dashboard.internetcomputer.org/
+- Electroneum Blockchain Explorer: For monitoring contract transactions
 
 For additional support or questions:
 
@@ -220,8 +272,6 @@ For additional support or questions:
 3. Join Telegram community
 4. Contact @devbigeazi
 
-
 ## All tests passed
 
 <img width="641" alt="test" src="https://github.com/user-attachments/assets/41e09d25-3162-4012-8b0b-d7a7cfca2677" />
-
