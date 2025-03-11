@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Bell, Plus, LogOut, X } from 'lucide-react';
+import { Search, Bell, Plus, X } from 'lucide-react';
 import { usePrivy, useWallets, useUser } from '@privy-io/react-auth';
 import { Link } from 'react-router-dom';
 import { useLogout } from '@privy-io/react-auth';
@@ -120,11 +120,7 @@ const Header: React.FC = () => {
 
             {/* LogOut Button */}
             <button className="menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              {mobileMenuOpen ? (
-                <X className="w-5 h-5 text-white" />
-              ) : (
-                <LogOut className="w-5 h-5 text-white" />
-              )}
+              {mobileMenuOpen ? <X className="w-5 h-5 text-white" /> : ''}
             </button>
           </div>
         </div>
