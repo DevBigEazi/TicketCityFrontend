@@ -11,9 +11,10 @@ import EventsDashboardPage from './Pages /EventsDashboardPage';
 import './App.css';
 import { usePrivy } from '@privy-io/react-auth';
 import EventDetails from './Pages /EventDetails';
-import Settings from './Pages /Settings';
-import MyWallet from './Pages /MyWallet';
-import Hub from './Pages /Hub';
+// import Settings from './Pages /Settings';
+// import MyWallet from './Pages /MyWallet';
+// import Hub from './Pages /Hub';
+import ComingSoonPage from './components /ComingSoon';
 
 const App: React.FC = () => {
   const { ready } = usePrivy();
@@ -89,11 +90,11 @@ const App: React.FC = () => {
         <Route path="/published-events" element={<PublishedEvents />} />
         <Route path="/attendance-scan" element={<AttendancePage />} />
         <Route path="/my-events" element={<MyEventsPage />} />
-        <Route path="/my-wallet" element={<MyWallet />} />
-        <Route path="/hub" element={<Hub />} />
+        <Route path="/my-wallet" element={<ComingSoonPage />} />
+        <Route path="/organizers" element={<ComingSoonPage />} />
         <Route path="/manage-event/:id" element={<ManageEventsPage />} />
         <Route path="/dashboard" element={<EventsDashboardPage />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={<ComingSoonPage />} />
       </Routes>
     </Router>
   );

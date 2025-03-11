@@ -9,3 +9,7 @@
 }
 
 /* box-shadow: 1px 1px 10px 0px #ffffff40; */
+
+.explore-bg {
+  background: url('./assets/images/ExploreBg.png') no-repeat center center/cover;
+}
