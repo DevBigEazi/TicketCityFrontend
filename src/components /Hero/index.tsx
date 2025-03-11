@@ -7,7 +7,7 @@ const Hero: React.FC = () => {
       <div className="absolute explore-bg top-0 inset-0 bg-cover bg-center" style={{}} />
 
       {/* Content */}
-      <div className="relative h-full explore-bg flex flex-col items-center justify-center text-center px-4">
+      <div className="relative h-full  flex flex-col items-center justify-center text-center px-4">
         {/* <img src={bg} className="h-32 w-32" /> */}
         <h1 className="font-orbitron font-semibold text-2xl md:text-[28px] leading-[35px] text-white mb-4">
           Explore Events & Book Your Spot
