@@ -24,6 +24,12 @@ const Header: React.FC = () => {
   const currentAddress = wallets?.[0]?.address;
   const displayAddress = authenticated ? truncateAddress(currentAddress) : 'Connect Wallet';
 
+  // Helper function to truncate address with custom length
+  const truncateAddressShort = (address?: string, chars = 2) => {
+    if (!address) return '';
+    return `${address.substring(0, chars + 2)}...${address.substring(address.length - chars)}`;
+  };
+
   // Refresh user data when wallet changes
   useEffect(() => {
     const handleUserRefresh = async () => {
@@ -82,12 +88,8 @@ const Header: React.FC = () => {
 
         {/* Mobile Layout */}
         <div className="flex sm:hidden items-center justify-between w-full">
-          {/* Notification Icon (Left) */}
-          <div className="relative">
-            {/* <div className="w-8 h-8 rounded-full border border-white shadow-button-inset flex items-center justify-center">
-              <Bell className="w-4 h-4 text-white" />
-            </div> */}
-          </div>
+          {/* Empty div for spacing */}
+          <div className="w-8"></div>
 
           {/* Mobile Search Toggle (Center) */}
           <button
@@ -99,13 +101,22 @@ const Header: React.FC = () => {
 
           {/* LogOut/Menu (Right) */}
           <div className="flex items-center gap-3">
-            {/* Create Button */}
-            <Link to={'/create-event'}>
-              <button className="bg-button-gradient px-3 py-1 rounded-full flex items-center gap-1 text-white font-inter text-xs">
-                <Plus className="w-3 h-3" />
-                <span>Create</span>
+            {/* Connect Wallet Button - Only show when not authenticated */}
+            {!authenticated ? (
+              <button
+                onClick={handleConnect}
+                className="px-3 py-1 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs"
+              >
+                Connect
               </button>
-            </Link>
+            ) : (
+              <button
+                onClick={logout}
+                className="px-3 py-1 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs"
+              >
+                {truncateAddressShort(currentAddress, 2)}
+              </button>
+            )}
 
             {/* LogOut Button */}
             <button className="menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -179,24 +190,18 @@ const Header: React.FC = () => {
         {mobileMenuOpen && (
           <div className="mobile-menu absolute top-16 right-0 w-48 bg-background border border-borderStroke rounded-bl-lg shadow-lg z-20">
             <div className="p-3 flex flex-col gap-3">
-              {!authenticated ? (
-                <button
-                  onClick={handleConnect}
-                  className="w-full px-3 py-2 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs text-center"
-                >
-                  Connect Wallet
+              <Link to={'/create-event'}>
+                <button className="w-full bg-button-gradient px-3 py-2 rounded-full flex items-center justify-center gap-1 text-white font-inter text-xs">
+                  <Plus className="w-3 h-3" />
+                  <span>Create Event</span>
                 </button>
-              ) : (
+              </Link>
+
+              {authenticated && (
                 <div className="flex flex-col gap-2">
                   <div className="text-white text-xs text-center py-1 px-2 bg-opacity-50 bg-searchBg rounded">
                     {displayAddress}
                   </div>
-                  <button
-                    onClick={logout}
-                    className="w-full px-3 py-1 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs"
-                  >
-                    Logout
-                  </button>
                 </div>
               )}
             </div>
