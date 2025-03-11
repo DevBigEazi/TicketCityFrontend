@@ -82,7 +82,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<EventsDashboardPage />} />
+        <Route path="/" element={<ExploreEvents />} />
         <Route path="/explore" element={<ExploreEvents />} />
         <Route path="/event/:eventId" element={<EventDetails />} />
         <Route path="/create-event" element={<CreateEventForm />} />
