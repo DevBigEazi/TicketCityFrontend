@@ -27,7 +27,6 @@ const navLinks = [
 interface SidebarProps {
   onNavigate: (path: string) => void;
   currentPath: string;
-  // Add your existing props here
 }
 
 const Sidebar: React.FC<SidebarProps> = () => {
