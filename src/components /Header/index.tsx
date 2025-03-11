@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Search, Bell, Plus } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Search, Bell, Plus, LogOut, X } from 'lucide-react';
 import { usePrivy, useWallets, useUser } from '@privy-io/react-auth';
 import { Link } from 'react-router-dom';
 import { useLogout } from '@privy-io/react-auth';
@@ -10,6 +10,8 @@ const Header: React.FC = () => {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { user, refreshUser } = useUser();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
 
   const { logout } = useLogout({
     onSuccess: () => {
@@ -17,8 +19,6 @@ const Header: React.FC = () => {
       // Any logic you'd like to execute after a user successfully logs out
     },
   });
-
-  console.log(user);
 
   // Get the first wallet address if available
   const currentAddress = wallets?.[0]?.address;
@@ -46,12 +46,27 @@ const Header: React.FC = () => {
     }
   };
 
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (mobileMenuOpen && !target.closest('.mobile-menu') && !target.closest('.menu-toggle')) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [mobileMenuOpen]);
+
   return (
-    <header className="bg-background border-b border-borderStroke p-4">
-      <div className="flex items-center justify-between gap-4">
-        {/* Search Bar */}
-        <div className="flex-1 max-w-md">
-          <div className="flex">
+    <header className="bg-background border-b border-borderStroke p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
+        {/* Desktop Search Bar */}
+        <div className="hidden sm:flex flex-1 max-w-md">
+          <div className="flex w-full">
             <div className="flex-1 relative">
               <input
                 type="text"
@@ -65,8 +80,65 @@ const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Section */}
-        <div className="flex items-center gap-4">
+        {/* Mobile Layout */}
+        <div className="flex sm:hidden items-center justify-between w-full">
+          {/* Notification Icon (Left) */}
+          <div className="relative">
+            {/* <div className="w-8 h-8 rounded-full border border-white shadow-button-inset flex items-center justify-center">
+              <Bell className="w-4 h-4 text-white" />
+            </div> */}
+          </div>
+
+          {/* Mobile Search Toggle (Center) */}
+          <button
+            className="flex items-center justify-center"
+            onClick={() => setSearchVisible(!searchVisible)}
+          >
+            <Search className="w-5 h-5 text-white" />
+          </button>
+
+          {/* LogOut/Menu (Right) */}
+          <div className="flex items-center gap-3">
+            {/* Create Button */}
+            <Link to={'/create-event'}>
+              <button className="bg-button-gradient px-3 py-1 rounded-full flex items-center gap-1 text-white font-inter text-xs">
+                <Plus className="w-3 h-3" />
+                <span>Create</span>
+              </button>
+            </Link>
+
+            {/* LogOut Button */}
+            <button className="menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5 text-white" />
+              ) : (
+                <LogOut className="w-5 h-5 text-white" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Search Bar (shown conditionally) */}
+        {searchVisible && (
+          <div className="absolute top-16 left-0 right-0 px-3 py-2 bg-background border-b border-borderStroke sm:hidden z-10">
+            <div className="flex w-full">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="w-full bg-searchBg border border-borderStroke rounded-l-lg px-3 py-2 text-white font-inter text-xs focus:outline-none"
+                  autoFocus
+                />
+              </div>
+              <button className="bg-button-gradient px-2 py-2 rounded-r-lg flex items-center justify-center">
+                <Search className="w-4 h-4 text-white" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Right Section for Desktop */}
+        <div className="hidden sm:flex items-center gap-4">
           {/* Connect Wallet Button - Only show when not authenticated */}
           {!authenticated && (
             <button
@@ -102,6 +174,34 @@ const Header: React.FC = () => {
             </button>
           </Link>
         </div>
+
+        {/* Mobile Menu (conditionally shown) */}
+        {mobileMenuOpen && (
+          <div className="mobile-menu absolute top-16 right-0 w-48 bg-background border border-borderStroke rounded-bl-lg shadow-lg z-20">
+            <div className="p-3 flex flex-col gap-3">
+              {!authenticated ? (
+                <button
+                  onClick={handleConnect}
+                  className="w-full px-3 py-2 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs text-center"
+                >
+                  Connect Wallet
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="text-white text-xs text-center py-1 px-2 bg-opacity-50 bg-searchBg rounded">
+                    {displayAddress}
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="w-full px-3 py-1 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );
