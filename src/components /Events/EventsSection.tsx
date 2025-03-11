@@ -471,8 +471,8 @@ const EventsSection: React.FC = () => {
                   {locationStatus === 'loading'
                     ? 'Getting location...'
                     : geoPermissionDenied
-                    ? 'Location access denied'
-                    : 'Enable location'}
+                      ? 'Location access denied'
+                      : 'Enable location'}
                 </span>
               </button>
             )}
@@ -541,7 +541,7 @@ const EventsSection: React.FC = () => {
 
           <button
             onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-            className="flex items-center gap-2 text-textGray hover:text-white p-2 rounded-lg bg-searchBg"
+            className=" hidden md:flex items-center gap-2 text-textGray hover:text-white p-2 rounded-lg bg-searchBg"
           >
             {viewMode === 'grid' ? (
               <List className="w-4 h-4" />
