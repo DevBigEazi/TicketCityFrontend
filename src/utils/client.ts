@@ -5,7 +5,7 @@ export const TICKET_CITY_ADDR = '0x123bFf8D754b29772E1EfAD5B075F55600577DcD';
 
 // Primary and fallback RPC URLs
 const PRIMARY_RPC =
-  import.meta.env.VITE_ELECTRONEUM_TESTNET_RPC || 'https://rpc.ankr.com/electroneum';
+  import.meta.env.VITE_ELECTRONEUM_MAINNET_RPC || 'https://rpc.ankr.com/electroneum';
 const FALLBACK_RPC = 'https://rpc.electroneum.com'; // Official testnet RPC as fallback
 
 export const createWalletClientInstance = (provider: any) => {
