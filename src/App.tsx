@@ -60,11 +60,9 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-background flex justify-center items-center p-8">
         <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-[1px_1px_10px_0px_#FFFFFF40] p-8">
-          <h1 className="text-white text-2xl font-bold mb-4 text-center">
-            Wallet Connection Taking Too Long
-          </h1>
+          <h1 className="text-white text-2xl font-bold mb-4 text-center">Connection Interrupted</h1>
           <p className="text-white text-center mb-6">
-            There seems to be an issue connecting to your wallet. Please try refreshing the page.
+            Check your internet connection and please try refreshing the page.
           </p>
           <div className="flex justify-center">
             <button
