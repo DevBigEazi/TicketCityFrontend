@@ -7,7 +7,7 @@ import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client
 import { calculateDistance, geocodeLocation } from '../../utils/locationMap';
 import { formatDate, formatDistance } from '../../utils/generalUtils';
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 9;
 const REFRESH_INTERVAL = 30000; // 30 seconds
 
 // Updated filters to match contract's ticket type categories

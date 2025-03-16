@@ -1,8 +1,76 @@
+import { electroneum, electroneumTestnet } from 'viem/chains';
+import { images } from '../constant';
+import { SupportedNetwork } from '../types';
+
+/**
+ * Parse chain ID from various formats to numeric value
+ * @param chainId The chain ID in various formats
+ * @returns The chain ID as a number, or null if invalid
+ */
+export const parseChainId = (chainId: string | number | undefined): number | null => {
+  try {
+    if (typeof chainId === 'string' && chainId.includes(':')) {
+      // CAIP-2 format (e.g., "eip155:7777777")
+      return parseInt(chainId.split(':')[1], 10);
+    } else if (typeof chainId === 'string' && chainId.startsWith('0x')) {
+      // Hex string
+      return parseInt(chainId, 16);
+    } else if (typeof chainId === 'string') {
+      // String numeric
+      return parseInt(chainId, 10);
+    } else if (typeof chainId === 'number') {
+      // Already a number
+      return chainId;
+    } else {
+      console.error('Unsupported chainId format:', chainId);
+      return null;
+    }
+  } catch (error) {
+    console.error(`Error parsing chainId ${chainId}:`, error);
+    return null;
+  }
+};
+
+// Supported networks using the chain object from viem
+export const SUPPORTED_NETWORKS: SupportedNetwork[] = [
+  {
+    id: electroneum.id,
+    name: electroneum.name,
+    icon: images.electroneumLogo,
+    rpcUrls: electroneum.rpcUrls.default.http,
+    isTestnet: false,
+  },
+  {
+    id: electroneumTestnet.id,
+    name: electroneumTestnet.name,
+    icon: images.electroneumLogo,
+    rpcUrls: electroneumTestnet.rpcUrls.default.http,
+    isTestnet: true,
+  },
+];
+
+// Find a network by ID
+export const getNetworkById = (chainId: number | null): SupportedNetwork | undefined => {
+  if (chainId === null) return undefined;
+  return SUPPORTED_NETWORKS.find((network) => network.id === chainId);
+};
+
+// Check if a network ID represents testnet
+export const isTestnetById = (chainId: number | null): boolean => {
+  if (chainId === null) return false;
+  const network = getNetworkById(chainId);
+  return network?.isTestnet || false;
+};
+
 // Profile image
 export const permanentUserIdentity =
   'https://gateway.pinata.cloud/ipfs/QmTXNQNNhFkkpCaCbHDfzbUCjXQjQnhX7QFoX1YVRQCSC8';
 
-// To handle masked email
+/**
+ * To handle masked email
+ * @param email The email to mask
+ * @returns The masked email string
+ */
 export const maskEmail = (email: string) => {
   if (!email || typeof email !== 'string') return 'Invalid email';
 
@@ -15,13 +83,21 @@ export const maskEmail = (email: string) => {
   return `${maskedLocal}@${domain}`;
 };
 
-// truncate addr
+/**
+ * Truncate address for display
+ * @param address The address to truncate
+ * @returns The truncated address string
+ */
 export const truncateAddress = (address: string) => {
   if (!address) return '';
-  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
-// Helper function to format Unix timestamp to readable date
+/**
+ * Helper function to format Unix timestamp to readable date
+ * @param timestamp The timestamp to format
+ * @returns Formatted date string
+ */
 export const formatDate = (timestamp: any) => {
   if (!timestamp) return 'TBD';
 
@@ -52,6 +128,11 @@ export const formatDate = (timestamp: any) => {
   }
 };
 
+/**
+ * Alternative format for the date display in MyEvent section
+ * @param timestamp The timestamp to format
+ * @returns Formatted date string
+ */
 export const formatDateMyEvent = (timestamp: number | string | undefined): string => {
   if (!timestamp) return 'TBD';
 
@@ -84,7 +165,11 @@ export const formatDateMyEvent = (timestamp: number | string | undefined): strin
   );
 };
 
-// Format distance for display
+/**
+ * Format distance for display
+ * @param distance The distance to format
+ * @returns Formatted distance string
+ */
 export const formatDistance = (distance: number | null): string => {
   if (distance === null) return 'N/A';
   if (distance >= 10000) return 'Virtual';

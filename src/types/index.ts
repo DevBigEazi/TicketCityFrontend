@@ -81,6 +81,7 @@ export interface TicketCreationEvent {
 
 // UI variant of Event with formatted data for display
 export interface UIEvent {
+  startTimestamp: number;
   id: string;
   type: string;
   title: string;
@@ -157,6 +158,15 @@ export interface FooterSection {
   links: string[];
 }
 
+// Interface for network definition
+export interface SupportedNetwork {
+  id: number;
+  name: string;
+  icon: string;
+  rpcUrls: readonly string[];
+  isTestnet: boolean;
+}
+
 // API data type - matches your current EventData
 export interface EventData {
   id: number;
@@ -173,6 +183,78 @@ export interface EventData {
   expectedAttendees: number;
   imageUri: string;
   ticketsData?: EventTicketsData; // Optional because it's added after fetching
+}
+
+// Interface for event objects in state
+export interface EventObjects {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  location: string;
+  date: string;
+  endDate: string;
+  price: {
+    regular: number;
+    vip: number;
+  };
+  image: string;
+  organiser: string;
+  attendees: {
+    registered: number;
+    expected: number;
+    verified: number;
+  };
+  hasEnded: boolean;
+  hasNotStarted: boolean;
+  isLive: boolean;
+  isVerified: boolean;
+  hasTicket: boolean;
+  ticketType: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  rawData: EventDataStructure;
+  remainingTickets: number;
+  hasTicketCreated: boolean;
+  hasRegularTicket: boolean;
+  hasVIPTicket: boolean;
+  coordinates: { lat: number; lng: number } | null;
+  distance: number | null;
+}
+
+// Interfaces for the event data structure
+export interface EventDataStructure {
+  title: string;
+  desc: string;
+  location: string;
+  startDate: bigint;
+  endDate: bigint;
+  ticketType: number;
+  imageUri: string;
+  organiser: string;
+  userRegCount: bigint;
+  expectedAttendees: bigint;
+  verifiedAttendeesCount: bigint;
+}
+
+export interface EventTickets {
+  regularTicketFee: bigint;
+  vipTicketFee: bigint;
+}
+
+export interface TicketDetails {
+  eventIds: bigint[];
+  ticketTypes: string[];
+}
+
+export interface TicketsMap {
+  [key: string]: string;
+}
+
+export interface NetworkState {
+  isTestnet: boolean;
+  chainId: number | null;
+  isConnected: boolean;
 }
 
 // Helper type for converting between contract data and UI data

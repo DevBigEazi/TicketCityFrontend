@@ -1,5 +1,5 @@
 {
-  "name": "Ticket City",
+  "name": "ticket-city",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -15,6 +15,7 @@
     "ethers": "^6.13.5",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.475.0",
+    "ngrok": "^5.0.0-beta.2",
     "pinata-web3": "^0.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
