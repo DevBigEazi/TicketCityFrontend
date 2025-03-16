@@ -4,7 +4,7 @@ import EventCard from './EventsCard';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { safeContractRead } from '../../utils/client';
-import { encodeFunctionData} from 'viem';
+import { encodeFunctionData } from 'viem';
 import { formatDate, truncateAddress } from '../../utils/generalUtils';
 import {
   EventDataStructure,
@@ -14,7 +14,8 @@ import {
   TicketsMap,
 } from '../../types';
 import { useNetwork } from '../../contexts/NetworkContext';
-const EventsDashboardHome = () => {
+
+const Dashboard = () => {
   // Core state
   const [viewMode] = useState<'grid' | 'list'>('grid');
   const [events, setEvents] = useState<EventObjects[]>([]);
@@ -40,7 +41,7 @@ const EventsDashboardHome = () => {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  // Use the network context instead of managing network state locally
+  // Network context 
   const {
     isTestnet,
     chainId,
@@ -55,7 +56,7 @@ const EventsDashboardHome = () => {
     connectionStatus,
   } = useNetwork();
 
-  // Main data fetching function using network context
+  // Main data fetching function
   const fetchUserData = useCallback(async () => {
     if (!currentWalletAddress) {
       setLoading(false);
@@ -261,7 +262,7 @@ const EventsDashboardHome = () => {
         }),
       );
 
-      // Filter out null responses with a type predicate to help TypeScript understand
+      // Filter out null responses with a type predicate
       const formattedEvents: EventObjects[] = eventsData.filter(
         (event): event is EventObjects => event !== null,
       );
@@ -356,7 +357,7 @@ const EventsDashboardHome = () => {
     if (isRefreshing) return;
 
     setIsRefreshing(true);
-    refreshData(); // Use the context method to refresh network data
+    refreshData();
     fetchUserData();
   };
 
@@ -759,4 +760,4 @@ const EventsDashboardHome = () => {
   );
 };
 
-export default EventsDashboardHome;
+export default Dashboard;

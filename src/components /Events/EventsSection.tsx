@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LayoutGrid, List, MapPin, Compass } from 'lucide-react';
 import EventCard from './EventsCard';
-import { useNetwork } from '../../contexts/NetworkContext'; // Import the network context
+import { useNetwork } from '../../contexts/NetworkContext';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { calculateDistance, geocodeLocation } from '../../utils/locationMap';
 import { formatDate, formatDistance } from '../../utils/generalUtils';
 import { safeContractRead } from '../../utils/client';
-import { UIEvent, EventFilter } from '../../types'; // Import types
+import { UIEvent, EventFilter } from '../../types';
+import { zeroAddress } from 'viem';
 
 const ITEMS_PER_PAGE = 9;
 const REFRESH_INTERVAL = 30000; // 30 seconds
 
-// Updated filters to match contract's ticket type categories
+// Filters to match contract's ticket type categories
 const filters: EventFilter[] = [
   'All',
   'Free',
@@ -60,10 +61,11 @@ const EventsSection: React.FC = () => {
     if (Number(eventData.ticketType) === 0) return 'Free';
 
     // Check if event has VIP tickets
-    const hasVIP = eventData.paidTicketCategory === 2; // Assuming PaidTicketCategory.VIP is 2
-    if (hasVIP) return 'VIP';
+    const hasRegular = eventData.paidTicketCategory === 1; // PaidTicketCategory.REGULAR takes nuber 1 position in enum
+    const hasVIP = eventData.paidTicketCategory === 2; // PaidTicketCategory.VIP takes nuber 2 position in enum
+    if (hasVIP || hasRegular) return 'Paid';
 
-    return 'Paid'; // Default for paid tickets
+    return 'Free';
   };
 
   // Function to get user's location
@@ -279,7 +281,7 @@ const EventsSection: React.FC = () => {
                 if (
                   Number(eventData.ticketType) === 0 &&
                   eventData.ticketNFTAddr &&
-                  eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+                  eventData.ticketNFTAddr !== zeroAddress
                 ) {
                   hasTicketCreated = true;
                 }
@@ -367,7 +369,7 @@ const EventsSection: React.FC = () => {
 
         console.log('Formatted events:', validEvents);
 
-        // Filter out events that have ended AND ensure at least one ticket is available
+        // Filter out events that have not ended AND ensure at least one ticket is available
         const activeEvents = validEvents.filter(
           (event) => !event.hasEnded && event.hasTicketCreated,
         );
@@ -627,9 +629,6 @@ const EventsSection: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Network switched indicator - silent refresh */}
-      {/* No notification displayed but we still track network switch status */}
 
       {/* Error message */}
       {errorMessage && (

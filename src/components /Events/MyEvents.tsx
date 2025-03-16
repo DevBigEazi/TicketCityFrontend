@@ -7,7 +7,7 @@ import { safeContractRead } from '../../utils/client';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { MyEvent, Stats } from '../../types';
 
-const MyEventsComponent = () => {
+const MyEvents = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'ongoing' | 'past'>('upcoming');
   const [events, setEvents] = useState<MyEvent[]>([]);
@@ -68,11 +68,11 @@ const MyEventsComponent = () => {
     }
 
     try {
-      // Get client and contract address from NetworkContext
+      // Get client and contract address
       const publicClient = getPublicClient();
       const contractAddress = getActiveContractAddress();
 
-      // Use the optimized contract function to get events with tickets
+      // Use the contract function to get events with tickets
       const eventsWithTicketIds = (await safeContractRead(
         publicClient,
         {
@@ -274,7 +274,7 @@ const MyEventsComponent = () => {
     }
 
     try {
-      // Get client and contract address from NetworkContext
+      // Get client and contract address
       const publicClient = getPublicClient();
       const contractAddress = getActiveContractAddress();
 
@@ -763,4 +763,4 @@ const MyEventsComponent = () => {
   );
 };
 
-export default MyEventsComponent;
+export default MyEvents;

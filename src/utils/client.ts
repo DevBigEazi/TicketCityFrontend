@@ -99,12 +99,14 @@ export const safeContractRead = async (
 ) => {
   try {
     const isConnected = await checkRPCConnection(client);
+
     if (!isConnected) {
       const networkType = isTestnet ? 'testnet' : 'mainnet';
       throw new Error(
         `Cannot connect to Electroneum ${networkType} RPC. The network might be unavailable.`,
       );
     }
+    
     return await client.readContract(options);
   } catch (error: any) {
     console.error('Contract read failed:', error);

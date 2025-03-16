@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle } from 'lucide-react';
-// import { useWallets } from '@privy-io/react-auth';
-import {
-  createPublicClientInstance,
-  createWalletClientInstance,
-  TICKET_CITY_ADDR,
-} from '../../utils/client';
+import { createWalletClientInstance } from '../../utils/client';
 import { formatEther } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { truncateAddress } from '../../utils/generalUtils';
 
 // Enums for ticket types to match the contract
 const TicketType = {
@@ -26,9 +23,7 @@ interface PurchaseTicketSectionProps {
   authenticated: boolean;
   login: () => void;
   wallets: any[];
-  balance: string;
   refreshEventDetails: () => Promise<void>;
-  refreshBalance?: () => Promise<void>;
 }
 
 const PurchaseTicketSection = ({
@@ -36,16 +31,27 @@ const PurchaseTicketSection = ({
   authenticated,
   login,
   wallets,
-  balance,
   refreshEventDetails,
-  refreshBalance,
 }: PurchaseTicketSectionProps) => {
   const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
 
-  const publicClient = createPublicClientInstance();
+  // Use the network context instead of creating clients directly
+  const {
+    getPublicClient,
+    getActiveContractAddress,
+    isTestnet,
+    currentWalletAddress,
+    tokenBalance,
+    isConnected,
+    networkName,
+    refreshData,
+  } = useNetwork();
+
+  // Get the public client from network context
+  const publicClient = getPublicClient();
 
   // Determine what options should be available
   const isPaidEvent = event && Number(event.ticketType) === TicketType.PAID;
@@ -80,6 +86,12 @@ const PurchaseTicketSection = ({
       return;
     }
 
+    // Check if network is connected
+    if (!isConnected) {
+      setPurchaseError('Network RPC is not available. Please check your connection');
+      return;
+    }
+
     setIsPurchasing(true);
     setPurchaseError(null);
     setPurchaseSuccess(false);
@@ -109,9 +121,12 @@ const PurchaseTicketSection = ({
         }
       }
 
+      // Get contract address from context
+      const contractAddress = getActiveContractAddress();
+
       // Verify user has enough balance
       const balanceWei = await publicClient.getBalance({
-        address: wallets[0].address,
+        address: currentWalletAddress as `0x${string}`,
       });
 
       if (balanceWei < ticketPrice) {
@@ -120,19 +135,19 @@ const PurchaseTicketSection = ({
         );
       }
 
-      // Get wallet client
+      // Get wallet client - use the isTestnet flag from context
       const provider = await wallets[0].getEthereumProvider();
-      const walletClient = createWalletClientInstance(provider);
+      const walletClient = createWalletClientInstance(provider, isTestnet);
 
       try {
         // Purchase the ticket
         const hash = await walletClient.writeContract({
-          address: TICKET_CITY_ADDR,
+          address: contractAddress,
           abi: TICKET_CITY_ABI,
           functionName: 'purchaseTicket',
           args: [event.id, ticketCategory],
           value: ticketPrice,
-          account: wallets[0].address,
+          account: currentWalletAddress as `0x${string}`,
         });
 
         // Wait for transaction confirmation
@@ -149,10 +164,8 @@ const PurchaseTicketSection = ({
 
           // Refresh event details
           await refreshEventDetails();
-          // Update balance
-          if (refreshBalance) {
-            await refreshBalance();
-          }
+          // Update balance and network state
+          await refreshData();
         } else {
           throw new Error('Transaction failed');
         }
@@ -242,6 +255,22 @@ const PurchaseTicketSection = ({
         🎟️ Purchase Ticket
       </h2>
 
+      {/* Network Information */}
+      <div className="bg-primary/20 p-3 rounded-lg mb-4">
+        <p className="font-inter text-sm text-white">
+          Network: {isTestnet ? '🧪 Testnet' : '🌐 Mainnet'}{' '}
+          <span className={isConnected ? 'text-green-400' : 'text-red-400'}>
+            {networkName} {isConnected ? '(Connected)' : '(RPC Error)'}
+          </span>
+        </p>
+        <p className="font-inter text-sm text-white">
+          Wallet: {currentWalletAddress ? truncateAddress(currentWalletAddress) : 'Not connected'}
+        </p>
+        <p className="font-inter text-sm text-white">
+          Contract: {truncateAddress(getActiveContractAddress())}
+        </p>
+      </div>
+
       {/* Success message */}
       {purchaseSuccess && (
         <div className="bg-green-900/30 p-4 rounded-lg flex items-center gap-2 mb-4">
@@ -263,7 +292,7 @@ const PurchaseTicketSection = ({
       <div className="space-y-4">
         {/* Balance info */}
         <div className="bg-slate-800/50 p-3 rounded-lg">
-          <p className="font-inter text-medium text-white">Your Balance: {balance} ETN</p>
+          <p className="font-inter text-medium text-white">Your Balance: {tokenBalance} ETN</p>
         </div>
 
         {/* Ticket selector for paid events */}
@@ -277,8 +306,8 @@ const PurchaseTicketSection = ({
               ? selectedTicketType === 'REGULAR' && hasRegularOption
                 ? `${formatEther(event.ticketsData.regularTicketFee)} ETN`
                 : selectedTicketType === 'VIP' && hasVipOption
-                  ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
-                  : 'Ticket type not available'
+                ? `${formatEther(event.ticketsData.vipTicketFee)} ETN`
+                : 'Ticket type not available'
               : 'Free'}
           </p>
         </div>
@@ -286,7 +315,11 @@ const PurchaseTicketSection = ({
         {/* Purchase button */}
         <button
           onClick={handlePurchaseTicket}
-          disabled={isPurchasing || (!hasRegularOption && !hasVipOption && !event.ticketNFTAddr)}
+          disabled={
+            isPurchasing ||
+            !isConnected ||
+            (!hasRegularOption && !hasVipOption && !event.ticketNFTAddr)
+          }
           className="w-full bg-primary rounded-lg py-3 font-poppins text-[18px] leading-[27px] tracking-wider text-white disabled:opacity-50"
         >
           {isPurchasing ? 'Processing...' : 'Purchase Ticket'}
