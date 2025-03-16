@@ -66,6 +66,37 @@ export interface Event {
   ticketsData: EventTicketsData;
 }
 
+// MyEvent interface
+export interface MyEvent {
+  id: string;
+  title: string;
+  image: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  ticketsSold: number;
+  ticketsTotal: number;
+  ticketsVerified: number;
+  hasEnded: boolean;
+  hasNotStarted: boolean;
+  isLive: boolean;
+  hasTickets: boolean;
+  revenue: number;
+  canRelease: boolean;
+  attendanceRate: number;
+}
+
+// Define Stats interface
+export interface Stats {
+  totalRevenue: number;
+  revenuePending: number;
+  refundsIssued: number;
+}
+
 // Interface specifically for the TicketCreationSection component
 export interface TicketCreationEvent {
   id: number | string;

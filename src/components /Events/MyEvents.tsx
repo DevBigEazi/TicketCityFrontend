@@ -3,104 +3,100 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Calendar, Ticket, RefreshCw, QrCode } from 'lucide-react';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
-import { formatEther } from 'viem';
-import { formatDateMyEvent } from '../../utils/generalUtils';
+import { safeContractRead } from '../../utils/client';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { MyEvent, Stats } from '../../types';
 
 const MyEventsComponent = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('upcoming');
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [eventsWithoutTickets, setEventsWithoutTickets] = useState<Event[]>([]);
-  const [balance, setBalance] = useState('••••');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
-  console.log(lastUpdated);
-  const [stats, setStats] = useState({
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'ongoing' | 'past'>('upcoming');
+  const [events, setEvents] = useState<MyEvent[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [eventsWithoutTickets, setEventsWithoutTickets] = useState<MyEvent[]>([]);
+  const [balance, setBalance] = useState<string>('••••');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [stats, setStats] = useState<Stats>({
     totalRevenue: 0,
     revenuePending: 0,
     refundsIssued: 0,
-  }) as any[];
-  const initialDataLoaded = useRef(false);
+  });
+  const initialDataLoaded = useRef<boolean>(false);
+  const previousChainIdRef = useRef<number | null>(null);
 
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  const walletAddress = wallets?.[0]?.address as `0x${string}`;
-  const publicClient = createPublicClientInstance();
+  // Get network context
+  const {
+    isTestnet,
+    chainId,
+    isConnected,
+    getPublicClient,
+    getActiveContractAddress,
+    tokenBalance,
+    currentWalletAddress,
+    checkRPCStatus,
+    refreshData,
+    networkName,
+  } = useNetwork();
 
-  // Format date for display - keeping only for backward compatibility
-  interface Event {
-    id: string;
-    title: string;
-    image: string;
-    location: string;
-    startDate: string;
-    endDate: string;
-    startTime: string;
-    endTime: string;
-    startTimestamp: number;
-    endTimestamp: number;
-    ticketsSold: number;
-    ticketsTotal: number;
-    ticketsVerified: number;
-    hasEnded: boolean;
-    hasNotStarted: boolean;
-    isLive: boolean;
-    hasTickets: boolean;
-    revenue: number;
-    canRelease: boolean;
-    attendanceRate: number;
-  }
-
-  // Get ETN Balance
-  const getETNBalance = useCallback(async () => {
-    if (!wallets || !wallets.length || !wallets[0]?.address) {
-      console.log('No wallet available yet, skipping balance fetch');
-      return;
-    }
-
-    try {
-      const tokenBalanceWei = await publicClient.getBalance({
-        address: walletAddress,
-      });
-
-      const formattedBalance = formatEther(tokenBalanceWei);
-      setBalance(parseFloat(formattedBalance).toFixed(4));
-    } catch (error) {
-      console.error('Error fetching token balance:', error);
+  // Get ETN Balance using NetworkContext
+  const getETNBalance = useCallback(() => {
+    // Directly update balance from tokenBalance in NetworkContext
+    if (tokenBalance && tokenBalance !== 'Loading...' && tokenBalance !== '--') {
+      setBalance(tokenBalance);
+    } else {
       setBalance('••••');
     }
-  }, [wallets, publicClient]);
+  }, [tokenBalance]);
 
   // Fetch events with tickets using the optimized contract function
   const fetchEventsWithTickets = useCallback(async () => {
-    if (!walletAddress) {
-      console.log('No wallet address available yet, skipping data fetch');
+    if (!currentWalletAddress || !isConnected) {
+      console.log('No wallet address available or network not connected, skipping data fetch');
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    // Check RPC connection first
+    const rpcConnected = await checkRPCStatus();
+    if (!rpcConnected) {
+      console.error('RPC connection error. Cannot fetch events.');
+      setLoading(false);
+      return;
+    }
 
     try {
+      // Get client and contract address from NetworkContext
+      const publicClient = getPublicClient();
+      const contractAddress = getActiveContractAddress();
+
       // Use the optimized contract function to get events with tickets
-      const eventsWithTicketIds = (await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'getEventsWithTicketByUser',
-        args: [walletAddress],
-      })) as unknown[];
+      const eventsWithTicketIds = (await safeContractRead(
+        publicClient,
+        {
+          address: contractAddress,
+          abi: TICKET_CITY_ABI,
+          functionName: 'getEventsWithTicketByUser',
+          args: [currentWalletAddress],
+        },
+        isTestnet,
+      )) as unknown[];
 
       console.log('Events with tickets IDs:', eventsWithTicketIds);
 
       if (!eventsWithTicketIds || eventsWithTicketIds.length === 0) {
         console.log('No events with tickets found');
         setEvents([]);
+        setStats({
+          totalRevenue: 0,
+          revenuePending: 0,
+          refundsIssued: 0,
+        });
       } else {
         // Process events with tickets
-        const eventsWithTickets: Event[] = [];
+        const eventsWithTickets: MyEvent[] = [];
         let totalRevenue = 0;
         let revenuePending = 0;
         let refundsIssued = 0;
@@ -118,20 +114,28 @@ const MyEventsComponent = () => {
                 throw new Error('eventId is not a valid type');
               }
 
-              const eventData = await publicClient.readContract({
-                address: TICKET_CITY_ADDR,
-                abi: TICKET_CITY_ABI,
-                functionName: 'getEvent',
-                args: [eventId],
-              });
+              const eventData = await safeContractRead(
+                publicClient,
+                {
+                  address: contractAddress,
+                  abi: TICKET_CITY_ABI,
+                  functionName: 'getEvent',
+                  args: [eventId],
+                },
+                isTestnet,
+              );
 
               // Check if revenue can be released
-              const revenueDetails = await publicClient.readContract({
-                address: TICKET_CITY_ADDR,
-                abi: TICKET_CITY_ABI,
-                functionName: 'canReleaseRevenue',
-                args: [eventId],
-              });
+              const revenueDetails = await safeContractRead(
+                publicClient,
+                {
+                  address: contractAddress,
+                  abi: TICKET_CITY_ABI,
+                  functionName: 'canReleaseRevenue',
+                  args: [eventId],
+                },
+                isTestnet,
+              );
 
               const now = Date.now();
               const startTimestamp = Number((eventData as any).startDate) * 1000;
@@ -196,7 +200,7 @@ const MyEventsComponent = () => {
                 minute: '2-digit',
               });
 
-              const formattedEvent = {
+              const formattedEvent: MyEvent = {
                 id: eventIdStr,
                 title: (eventData as any).title || 'Untitled Event',
                 image: imageUrl,
@@ -231,7 +235,7 @@ const MyEventsComponent = () => {
         );
 
         // Filter out null responses
-        const validEvents = eventsData.filter((event) => event !== null);
+        const validEvents = eventsData.filter((event): event is MyEvent => event !== null);
         console.log('Successfully fetched', validEvents.length, 'events with tickets');
 
         // Update events with tickets list
@@ -253,23 +257,38 @@ const MyEventsComponent = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [walletAddress, publicClient, formatDateMyEvent]);
+  }, [
+    currentWalletAddress,
+    isConnected,
+    checkRPCStatus,
+    getPublicClient,
+    getActiveContractAddress,
+    isTestnet,
+  ]);
 
-  // Fetch events without tickets using the dedicated smart contract function
+  // Fetch events without tickets
   const fetchEventsWithoutTickets = useCallback(async () => {
-    if (!walletAddress) {
+    if (!currentWalletAddress || !isConnected) {
       console.log('No wallet address available for fetching events without tickets');
       return;
     }
 
     try {
+      // Get client and contract address from NetworkContext
+      const publicClient = getPublicClient();
+      const contractAddress = getActiveContractAddress();
+
       // Call the smart contract function to get events without tickets
-      const eventsWithoutTicketIds = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'getEventsWithoutTicketsByUser',
-        args: [walletAddress],
-      });
+      const eventsWithoutTicketIds = await safeContractRead(
+        publicClient,
+        {
+          address: contractAddress,
+          abi: TICKET_CITY_ABI,
+          functionName: 'getEventsWithoutTicketsByUser',
+          args: [currentWalletAddress],
+        },
+        isTestnet,
+      );
 
       const eventsWithoutTicketIdsArray: any[] = eventsWithoutTicketIds as any[];
       console.log('Events without tickets IDs:', eventsWithoutTicketIdsArray);
@@ -285,12 +304,16 @@ const MyEventsComponent = () => {
         eventsWithoutTicketIds.map(async (eventId) => {
           try {
             const eventIdStr = eventId.toString();
-            const eventData = await publicClient.readContract({
-              address: TICKET_CITY_ADDR,
-              abi: TICKET_CITY_ABI,
-              functionName: 'getEvent',
-              args: [eventId],
-            });
+            const eventData = await safeContractRead(
+              publicClient,
+              {
+                address: contractAddress,
+                abi: TICKET_CITY_ABI,
+                functionName: 'getEvent',
+                args: [eventId],
+              },
+              isTestnet,
+            );
 
             const now = Date.now();
             const startTimestamp = Number((eventData as any).startDate) * 1000;
@@ -344,7 +367,7 @@ const MyEventsComponent = () => {
               minute: '2-digit',
             });
 
-            const formattedEvent: Event = {
+            const formattedEvent: MyEvent = {
               id: eventIdStr,
               title: (eventData as any).title || 'Untitled Event',
               image: imageUrl,
@@ -376,7 +399,9 @@ const MyEventsComponent = () => {
       );
 
       // Filter out null responses
-      const validEventsWithoutTickets = noTicketsEventsData.filter((event) => event !== null);
+      const validEventsWithoutTickets = noTicketsEventsData.filter(
+        (event): event is MyEvent => event !== null,
+      );
       console.log(
         'Successfully fetched',
         validEventsWithoutTickets.length,
@@ -389,11 +414,11 @@ const MyEventsComponent = () => {
       console.error('Failed to fetch events without tickets:', error);
       setEventsWithoutTickets([]);
     }
-  }, [walletAddress, publicClient, formatDateMyEvent]);
+  }, [currentWalletAddress, isConnected, getPublicClient, getActiveContractAddress, isTestnet]);
 
   // Fetch all event data
   const fetchAllEventData = useCallback(async () => {
-    if (!walletAddress) {
+    if (!currentWalletAddress) {
       setLoading(false);
       return;
     }
@@ -407,24 +432,61 @@ const MyEventsComponent = () => {
     } finally {
       setLoading(false);
     }
-  }, [walletAddress, fetchEventsWithTickets, fetchEventsWithoutTickets]);
+  }, [currentWalletAddress, fetchEventsWithTickets, fetchEventsWithoutTickets]);
+
+  // Update balance immediately whenever tokenBalance changes
+  useEffect(() => {
+    getETNBalance();
+  }, [tokenBalance, getETNBalance]);
 
   // Initial data fetch on wallet connection
   useEffect(() => {
-    // Only fetch if authenticated, wallet is connected, and data hasn't been loaded yet
-    if (authenticated && wallets?.length > 0 && !initialDataLoaded.current) {
+    // Only fetch if authenticated and wallet is connected
+    if (authenticated && wallets?.length > 0) {
       console.log('Wallet connected, fetching initial data...');
-      getETNBalance();
       fetchAllEventData();
       initialDataLoaded.current = true;
+
+      // Initialize chainId reference
+      previousChainIdRef.current = chainId;
     } else if (!authenticated || wallets?.length === 0) {
       setBalance('••••');
       setLoading(false);
       // Reset the ref if wallet disconnects
       initialDataLoaded.current = false;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, wallets?.length, getETNBalance]);
+  }, [authenticated, wallets?.length, fetchAllEventData, chainId]);
+
+  // Monitor network changes and refresh data when network changes
+  useEffect(() => {
+    // Skip if not initialized yet
+    if (previousChainIdRef.current === null) {
+      previousChainIdRef.current = chainId;
+      return;
+    }
+
+    // Check if chain ID has changed
+    if (previousChainIdRef.current !== chainId) {
+      console.log(`Network changed from chain ID ${previousChainIdRef.current} to ${chainId}`);
+
+      // Update reference
+      previousChainIdRef.current = chainId;
+
+      // Clear events to avoid showing wrong data during transition
+      setEvents([]);
+      setEventsWithoutTickets([]);
+
+      // Set loading state
+      setLoading(true);
+
+      // Refresh data
+      refreshData();
+      fetchAllEventData();
+    } else if (initialDataLoaded.current && !isConnected) {
+      // Network connection lost
+      fetchAllEventData();
+    }
+  }, [chainId, isTestnet, isConnected, fetchAllEventData, initialDataLoaded, refreshData]);
 
   // Manual refresh handler
   const handleManualRefresh = () => {
@@ -433,7 +495,7 @@ const MyEventsComponent = () => {
     console.log('Manual refresh triggered');
     setIsRefreshing(true);
 
-    getETNBalance();
+    refreshData(); // Use the NetworkContext refreshData method
     fetchAllEventData();
   };
 
@@ -474,12 +536,18 @@ const MyEventsComponent = () => {
 
   return (
     <div className="w-full min-h-screen bg-background p-6">
-      {/* Welcome Header with Refresh Button */}
+      {/* Welcome Header with Refresh Button and Network Info */}
       <div className="mb-8 rounded-2xl border border-borderStroke shadow-button-inset p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          <h1 className="text-white text-2xl md:text-3xl font-poppins">
-            Welcome, <span className="text-[#8B5CF6]">Organizer</span>
-          </h1>
+          <div>
+            <h1 className="text-white text-2xl md:text-3xl font-poppins mb-1">
+              Welcome, <span className="text-[#8B5CF6]">Organizer</span>
+            </h1>
+            <p className="text-sm text-textGray">
+              Connected to {networkName}
+              {!isConnected && ' (RPC Error)'}
+            </p>
+          </div>
           <div className="flex mt-4 md:mt-0 gap-4">
             <div className="flex items-center bg-[#201c2b] px-4 py-2 rounded-lg">
               <span className="font-poppins text-white mr-2">ETN Balance: {balance}</span>
@@ -494,7 +562,29 @@ const MyEventsComponent = () => {
             </button>
           </div>
         </div>
+        {/* Last Updated Timestamp */}
+        <div className="mt-4 text-xs text-textGray flex items-center">
+          <span>Last updated: {lastUpdated.toLocaleString()}</span>
+          {isRefreshing && <span className="ml-2 text-primary animate-pulse">Updating...</span>}
+        </div>
       </div>
+
+      {/* Network error message */}
+      {!isConnected && (
+        <div className="mb-6 p-4 bg-red-500 bg-opacity-10 border border-red-500 rounded-lg">
+          <p className="text-red-400 font-medium mb-1">Network Connection Error</p>
+          <p className="text-sm text-red-300">
+            Cannot connect to the {isTestnet ? 'Testnet' : 'Mainnet'} RPC. Events may not be
+            up-to-date. Please check your network connection and try again.
+          </p>
+          <button
+            onClick={() => fetchAllEventData()}
+            className="mt-2 px-4 py-1 bg-red-500 text-white rounded-lg text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -532,7 +622,7 @@ const MyEventsComponent = () => {
           {['upcoming', 'ongoing', 'past'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveTab(tab as 'upcoming' | 'ongoing' | 'past')}
               className={`px-4 py-2 rounded-xl font-poppins ${
                 activeTab === tab
                   ? 'bg-primary text-white'
@@ -607,6 +697,11 @@ const MyEventsComponent = () => {
         ) : (
           <div className="text-center py-10 bg-[#1c1827] rounded-xl border border-borderStroke">
             <p className="text-textGray">No {activeTab} events found</p>
+            {!isConnected && (
+              <p className="text-red-300 mt-2">
+                Network connection issues may prevent displaying your events.
+              </p>
+            )}
           </div>
         )}
       </div>
