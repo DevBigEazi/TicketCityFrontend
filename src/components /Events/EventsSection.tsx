@@ -1,40 +1,62 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LayoutGrid, List, MapPin, Compass } from 'lucide-react';
 import EventCard from './EventsCard';
-import { UIEvent, EventFilter, ViewMode } from '../../types';
+import { useNetwork } from '../../contexts/NetworkContext'; // Import the network context
 import TICKET_CITY_ABI from '../../abi/abi.json';
-import { createPublicClientInstance, TICKET_CITY_ADDR } from '../../utils/client';
 import { calculateDistance, geocodeLocation } from '../../utils/locationMap';
 import { formatDate, formatDistance } from '../../utils/generalUtils';
+import { safeContractRead } from '../../utils/client';
+import { UIEvent, EventFilter } from '../../types'; // Import types
 
 const ITEMS_PER_PAGE = 9;
 const REFRESH_INTERVAL = 30000; // 30 seconds
 
 // Updated filters to match contract's ticket type categories
-const filters = ['All', 'Free', 'Paid', 'Regular', 'VIP', 'Virtual', 'In-Person', 'Nearby'];
+const filters: EventFilter[] = [
+  'All',
+  'Free',
+  'Paid',
+  'Regular',
+  'VIP',
+  'Virtual',
+  'In-Person',
+  'Nearby',
+];
 
 const EventsSection: React.FC = () => {
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  // Get network context
+  const {
+    isTestnet,
+    chainId,
+    isConnected,
+    getPublicClient,
+    getActiveContractAddress,
+    checkRPCStatus,
+    refreshData,
+  } = useNetwork();
+
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeFilter, setActiveFilter] = useState<EventFilter>('All');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'Distance' | 'Popularity' | 'Ticket Price' | 'Date'>('Date');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [sortBy, setSortBy] = useState<string>('Date');
   const [events, setEvents] = useState<UIEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoPermissionDenied, setGeoPermissionDenied] = useState<boolean>(false);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [quickRefreshComplete, setQuickRefreshComplete] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState<boolean>(false);
+  const [quickRefreshComplete, setQuickRefreshComplete] = useState<boolean>(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [locationStatus, setLocationStatus] = useState<'loading' | 'success' | 'error' | 'idle'>(
-    'idle',
-  );
+  const [locationStatus, setLocationStatus] = useState<string>('idle');
+  const [networkSwitched, setNetworkSwitched] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const previousChainIdRef = useRef<number | null>(null);
 
-  const publicClient = createPublicClientInstance();
+  // Get ticket type based on event data
+  const getTicketType = (eventData: any): string => {
+    if (!eventData) return 'Unknown';
 
-  // Enhanced to better match contract's ticket type structure
-  const getTicketType = (eventData: any) => {
     if (Number(eventData.ticketType) === 0) return 'Free';
 
     // Check if event has VIP tickets
@@ -45,7 +67,7 @@ const EventsSection: React.FC = () => {
   };
 
   // Function to get user's location
-  const getUserLocation = () => {
+  const getUserLocation = (): void => {
     setLocationStatus('loading');
 
     if (!navigator.geolocation) {
@@ -107,215 +129,288 @@ const EventsSection: React.FC = () => {
     );
   };
 
-  // Fetch events from blockchain
-  const fetchEvents = async (showLoadingState = true) => {
-    if (showLoadingState) {
-      setLoading(true);
-    } else {
-      setIsRefreshing(true);
-    }
+  // Fetch events from blockchain with better network handling
+  const fetchEvents = useCallback(
+    async (showLoadingState = true): Promise<void> => {
+      if (showLoadingState) {
+        setLoading(true);
+        setErrorMessage('');
+      } else {
+        setIsRefreshing(true);
+      }
 
-    try {
-      // Get valid event IDs from the contract using getAllValidEvents
-      const validEventIds = await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
-        abi: TICKET_CITY_ABI,
-        functionName: 'getAllValidEvents',
-        args: [],
-      });
-
-      console.log('Valid event IDs:', validEventIds);
-
-      if (!validEventIds || !Array.isArray(validEventIds) || validEventIds.length === 0) {
-        console.warn('No valid events found');
-        setEvents([]);
+      // First, check if RPC is connected
+      const rpcConnected = await checkRPCStatus();
+      if (!rpcConnected) {
+        setErrorMessage(
+          'Cannot connect to the network. Please check your connection and try again.',
+        );
+        if (showLoadingState) {
+          setLoading(false);
+        } else {
+          setIsRefreshing(false);
+        }
         return;
       }
 
-      // Fetch each event's details using the getEvent function
-      const eventsData = await Promise.all(
-        validEventIds.map(async (eventId) => {
-          try {
-            const eventData = await publicClient.readContract({
-              address: TICKET_CITY_ADDR,
+      // Get the public client based on current network
+      const publicClient = getPublicClient();
+
+      // Get the correct contract address based on current network
+      const contractAddress = getActiveContractAddress();
+
+      console.log(`Fetching events for network: ${isTestnet ? 'Testnet' : 'Mainnet'}`);
+      console.log(`Using contract address: ${contractAddress}`);
+
+      try {
+        // Get valid event IDs using safeContractRead
+        let validEventIds: bigint[];
+        try {
+          validEventIds = (await safeContractRead(
+            publicClient,
+            {
+              address: contractAddress,
               abi: TICKET_CITY_ABI,
-              functionName: 'getEvent',
-              args: [eventId],
-            });
-
-            console.log(`Event ${eventId} data:`, eventData);
-            return { eventId, eventData };
-          } catch (error) {
-            console.error(`Error fetching event ${eventId}:`, error);
-            return null;
+              functionName: 'getAllValidEvents',
+              args: [],
+            },
+            isTestnet,
+          )) as bigint[];
+        } catch (error: any) {
+          console.error('Error fetching valid events:', error);
+          setErrorMessage(`Failed to fetch events: ${error.message}`);
+          if (!showLoadingState) {
+            setIsRefreshing(false);
+          } else {
+            setLoading(false);
           }
-        }),
-      );
+          return;
+        }
 
-      // Fetch ticket details for each event and geocode locations
-      const formattedEvents: UIEvent[] = await Promise.all(
-        eventsData
-          .filter((event): event is { eventId: any; eventData: any } => event !== null)
-          .map(async ({ eventId, eventData }) => {
-            // Check if event has ended
-            const hasEnded = Number((eventData as any).endDate) * 1000 < Date.now();
+        console.log('Valid event IDs:', validEventIds);
 
-            // Get ticket details for events
-            let regularPrice = 0;
-            let vipPrice = 0;
-            let hasRegularTicket = false;
-            let hasVIPTicket = false;
-            let hasTicketCreated = false;
+        if (!validEventIds || !Array.isArray(validEventIds) || validEventIds.length === 0) {
+          console.warn('No valid events found');
+          setEvents([]);
 
+          if (!showLoadingState) {
+            setIsRefreshing(false);
+          } else {
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Fetch each event's details using the getEvent function
+        const eventsData = await Promise.all(
+          validEventIds.map(async (eventId) => {
             try {
-              // Fetch ticket details for both free and paid events
-              const eventTickets = await publicClient.readContract({
-                address: TICKET_CITY_ADDR,
-                abi: TICKET_CITY_ABI,
-                functionName: 'eventTickets',
-                args: [eventId],
-              });
-
-              console.log(`Event ${eventId} tickets:`, eventTickets);
-
-              // Check if ticket data is an array (legacy format) or object (new format)
-              if (Array.isArray(eventTickets)) {
-                hasRegularTicket = eventTickets[0];
-                hasVIPTicket = eventTickets[1];
-                regularPrice = hasRegularTicket ? Number(eventTickets[2]) / 1e18 : 0;
-                vipPrice = hasVIPTicket ? Number(eventTickets[3]) / 1e18 : 0;
-              } else {
-                const tickets = eventTickets as {
-                  hasRegularTicket: boolean;
-                  hasVIPTicket: boolean;
-                  regularTicketFee: string;
-                  vipTicketFee: string;
-                };
-                hasRegularTicket = tickets.hasRegularTicket;
-                hasVIPTicket = (eventTickets as { hasVIPTicket: boolean }).hasVIPTicket;
-                regularPrice = hasRegularTicket
-                  ? Number((eventTickets as { regularTicketFee: string }).regularTicketFee) / 1e18
-                  : 0;
-                vipPrice = hasVIPTicket
-                  ? Number((eventTickets as { vipTicketFee: string }).vipTicketFee) / 1e18
-                  : 0;
-              }
-
-              // Check if any ticket type is available
-              hasTicketCreated =
-                hasRegularTicket || hasVIPTicket || Number((eventData as any).ticketType) === 0; // Free events are always considered to have tickets
-
-              // For free events, ensure they're marked as having tickets if NFT address exists
-              if (
-                Number((eventData as any).ticketType) === 0 &&
-                (eventData as any).ticketNFTAddr &&
-                (eventData as any).ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
-              ) {
-                hasTicketCreated = true;
-              }
-            } catch (error) {
-              console.error(`Error fetching ticket details for event ${eventId}:`, error);
-              // For backwards compatibility, check if ticketFee is set
-              if ((eventData as any).ticketFee) {
-                regularPrice = Number((eventData as any).ticketFee) / 1e18 || 0;
-                vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
-                hasRegularTicket = regularPrice > 0;
-                hasVIPTicket = false;
-                hasTicketCreated = hasRegularTicket;
-              }
-            }
-
-            // Validate and process the image URL
-            let imageUrl = (eventData as any).imageUri || '/placeholder-event.jpg';
-
-            // Get remaining tickets
-            const remainingTickets =
-              Number((eventData as any).expectedAttendees) -
-              Number((eventData as any).userRegCount);
-
-            // Geocode location to get coordinates
-            const locationStr = (eventData as any).location || 'TBD';
-            const coordinates = await geocodeLocation(locationStr);
-
-            // Calculate distance if user location is available
-            let distance = null;
-            if (userLocation && coordinates) {
-              distance = calculateDistance(
-                userLocation.lat,
-                userLocation.lng,
-                coordinates.lat,
-                coordinates.lng,
+              const eventData = await safeContractRead(
+                publicClient,
+                {
+                  address: contractAddress,
+                  abi: TICKET_CITY_ABI,
+                  functionName: 'getEvent',
+                  args: [eventId],
+                },
+                isTestnet,
               );
+
+              console.log(`Event ${eventId} data:`, eventData);
+              return { eventId, eventData };
+            } catch (error) {
+              console.error(`Error fetching event ${eventId}:`, error);
+              return null;
             }
-
-            // Create proper UIEvent object with typed rawData
-            const event: UIEvent = {
-              id: eventId.toString(),
-              type: getTicketType(eventData),
-              title: (eventData as any).title || 'Untitled Event',
-              description: (eventData as any).desc || 'No description available',
-              location: locationStr,
-              coordinates: coordinates,
-              distance: distance,
-              date: formatDate((eventData as any).startDate),
-              endDate: formatDate((eventData as any).endDate),
-              price: {
-                regular: regularPrice,
-                vip: vipPrice,
-              },
-              image: imageUrl,
-              organiser: (eventData as any).organiser,
-              attendees: {
-                registered: Number((eventData as any).userRegCount),
-                expected: Number((eventData as any).expectedAttendees),
-                verified: Number((eventData as any).verifiedAttendeesCount),
-              },
-              remainingTickets: remainingTickets,
-              hasEnded: hasEnded,
-              hasTicketCreated: hasTicketCreated,
-              hasRegularTicket: hasRegularTicket,
-              hasVIPTicket: hasVIPTicket,
-              isVerified: false,
-              rawData: {
-                ...eventData,
-                startDate: (eventData as any).startDate,
-                endDate: (eventData as any).endDate,
-              },
-            };
-
-            return event;
           }),
-      );
+        );
 
-      console.log('Formatted events:', formattedEvents);
+        // Fetch ticket details for each event and geocode locations
+        const formattedEvents = await Promise.all(
+          eventsData
+            .filter((event): event is { eventId: bigint; eventData: any } => event !== null)
+            .map(async ({ eventId, eventData }) => {
+              if (!eventData) return null;
 
-      // Filter out events that have ended AND ensure at least one ticket is available
-      const activeEvents: UIEvent[] = formattedEvents.filter(
-        (event) => !event.hasEnded && event.hasTicketCreated,
-      );
+              // Check if event has ended
+              const hasEnded = Number(eventData.endDate) * 1000 < Date.now();
 
-      console.log('Active events with tickets:', activeEvents);
-      setEvents(activeEvents);
+              // Get ticket details for events
+              let regularPrice = 0;
+              let vipPrice = 0;
+              let hasRegularTicket = false;
+              let hasVIPTicket = false;
+              let hasTicketCreated = false;
 
-      // Update the last updated timestamp
-      setLastUpdated(new Date());
+              try {
+                // Fetch ticket details for both free and paid events
+                const eventTickets = await safeContractRead(
+                  publicClient,
+                  {
+                    address: contractAddress,
+                    abi: TICKET_CITY_ABI,
+                    functionName: 'eventTickets',
+                    args: [eventId],
+                  },
+                  isTestnet,
+                );
 
-      if (userLocation) {
-        setSortBy('Distance');
+                console.log(`Event ${eventId} tickets:`, eventTickets);
+
+                // Check if ticket data is an array (legacy format) or object (new format)
+                if (Array.isArray(eventTickets)) {
+                  hasRegularTicket = Boolean(eventTickets[0]);
+                  hasVIPTicket = Boolean(eventTickets[1]);
+                  regularPrice = hasRegularTicket ? Number(eventTickets[2]) / 1e18 : 0;
+                  vipPrice = hasVIPTicket ? Number(eventTickets[3]) / 1e18 : 0;
+                } else {
+                  const tickets = eventTickets as any;
+                  hasRegularTicket = Boolean(tickets.hasRegularTicket);
+                  hasVIPTicket = Boolean(tickets.hasVIPTicket);
+                  regularPrice = hasRegularTicket ? Number(tickets.regularTicketFee) / 1e18 : 0;
+                  vipPrice = hasVIPTicket ? Number(tickets.vipTicketFee) / 1e18 : 0;
+                }
+
+                // Check if any ticket type is available
+                hasTicketCreated =
+                  hasRegularTicket || hasVIPTicket || Number(eventData.ticketType) === 0; // Free events are always considered to have tickets
+
+                // For free events, ensure they're marked as having tickets if NFT address exists
+                if (
+                  Number(eventData.ticketType) === 0 &&
+                  eventData.ticketNFTAddr &&
+                  eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+                ) {
+                  hasTicketCreated = true;
+                }
+              } catch (error) {
+                console.error(`Error fetching ticket details for event ${eventId}:`, error);
+                // For backwards compatibility, check if ticketFee is set
+                if (eventData.ticketFee) {
+                  regularPrice = Number(eventData.ticketFee) / 1e18 || 0;
+                  vipPrice = regularPrice * 2 || 0; // Estimate VIP as double regular price
+                  hasRegularTicket = regularPrice > 0;
+                  hasVIPTicket = false;
+                  hasTicketCreated = hasRegularTicket;
+                }
+              }
+
+              // Validate and process the image URL
+              let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
+
+              // Get remaining tickets
+              const remainingTickets =
+                Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
+
+              // Geocode location to get coordinates
+              const locationStr = eventData.location || 'TBD';
+              let coordinates = null;
+              try {
+                coordinates = await geocodeLocation(locationStr);
+              } catch (error) {
+                console.error(`Error geocoding location for event ${eventId}:`, error);
+              }
+
+              // Calculate distance if user location is available
+              let distance = null;
+              if (userLocation && coordinates) {
+                distance = calculateDistance(
+                  userLocation.lat,
+                  userLocation.lng,
+                  coordinates.lat,
+                  coordinates.lng,
+                );
+              }
+
+              // Create proper event object with typed rawData
+              const event: UIEvent = {
+                id: eventId.toString(),
+                type: getTicketType(eventData),
+                title: eventData.title || 'Untitled Event',
+                description: eventData.desc || 'No description available',
+                location: locationStr,
+                coordinates: coordinates,
+                distance: distance,
+                date: formatDate(eventData.startDate),
+                endDate: formatDate(eventData.endDate),
+                price: {
+                  regular: regularPrice,
+                  vip: vipPrice,
+                },
+                image: imageUrl,
+                organiser: eventData.organiser,
+                attendees: {
+                  registered: Number(eventData.userRegCount),
+                  expected: Number(eventData.expectedAttendees),
+                  verified: Number(eventData.verifiedAttendeesCount),
+                },
+                remainingTickets: remainingTickets,
+                hasEnded: hasEnded,
+                hasTicketCreated: hasTicketCreated,
+                hasRegularTicket: hasRegularTicket,
+                hasVIPTicket: hasVIPTicket,
+                isVerified: false,
+                startTimestamp: Number(eventData.startDate) * 1000,
+                rawData: {
+                  ...eventData,
+                  startDate: eventData.startDate,
+                  endDate: eventData.endDate,
+                },
+              };
+
+              return event;
+            }),
+        );
+
+        // Remove any null events
+        const validEvents = formattedEvents.filter((event): event is UIEvent => event !== null);
+
+        console.log('Formatted events:', validEvents);
+
+        // Filter out events that have ended AND ensure at least one ticket is available
+        const activeEvents = validEvents.filter(
+          (event) => !event.hasEnded && event.hasTicketCreated,
+        );
+
+        console.log('Active events with tickets:', activeEvents);
+        setEvents(activeEvents);
+
+        // Update the last updated timestamp
+        setLastUpdated(new Date());
+
+        if (userLocation) {
+          setSortBy('Distance');
+        }
+
+        // Reset network switched flag if it was set
+        if (networkSwitched) {
+          setNetworkSwitched(false);
+        }
+      } catch (error: any) {
+        console.error('Failed to fetch events:', error);
+        setErrorMessage(`Failed to fetch events: ${error.message}`);
+      } finally {
+        if (showLoadingState) {
+          setLoading(false);
+        } else {
+          setIsRefreshing(false);
+        }
       }
-    } catch (error) {
-      console.error('Failed to fetch events:', error);
-    } finally {
-      if (showLoadingState) {
-        setLoading(false);
-      } else {
-        setIsRefreshing(false);
-      }
-    }
-  };
+    },
+    [
+      isTestnet,
+      chainId,
+      isConnected,
+      getPublicClient,
+      getActiveContractAddress,
+      userLocation,
+      networkSwitched,
+      checkRPCStatus,
+    ],
+  );
 
-  //
-  const handleCachedLocation = async () => {
+  // Handle cached location
+  const handleCachedLocation = async (): Promise<void> => {
     const cachedLocation = localStorage.getItem('userLocation');
     if (cachedLocation) {
       try {
@@ -348,6 +443,9 @@ const EventsSection: React.FC = () => {
       setInitialLoadComplete(true);
     });
 
+    // Set initial chain ID reference
+    previousChainIdRef.current = chainId;
+
     // Clean up on unmount
     return () => {
       if (pollIntervalRef.current) {
@@ -368,7 +466,7 @@ const EventsSection: React.FC = () => {
     }, 100);
 
     return () => clearTimeout(quickRefreshTimeout);
-  }, [initialLoadComplete]);
+  }, [initialLoadComplete, fetchEvents]);
 
   // Normal polling after quick refresh
   useEffect(() => {
@@ -384,12 +482,42 @@ const EventsSection: React.FC = () => {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [quickRefreshComplete]);
+  }, [quickRefreshComplete, fetchEvents]);
 
-  // Handle catched location status
+  // Handle cached location status
   useEffect(() => {
     handleCachedLocation();
   }, []);
+
+  // Monitor network changes and refresh data when network changes
+  useEffect(() => {
+    // Skip if not initialized yet
+    if (previousChainIdRef.current === null) {
+      previousChainIdRef.current = chainId;
+      return;
+    }
+
+    // Check if chain ID has changed
+    if (previousChainIdRef.current !== chainId) {
+      console.log(`Network changed from chain ID ${previousChainIdRef.current} to ${chainId}`);
+
+      // Update reference
+      previousChainIdRef.current = chainId;
+
+      // Clear events to avoid showing wrong data during transition
+      setEvents([]);
+
+      // Set network switched flag
+      setNetworkSwitched(true);
+
+      // Refresh data
+      refreshData();
+      fetchEvents(true);
+    } else if (initialLoadComplete && !isConnected) {
+      // Network connection lost
+      fetchEvents(false);
+    }
+  }, [chainId, isTestnet, isConnected, fetchEvents, initialLoadComplete, refreshData]);
 
   // Apply filters and sorting to the events
   const filteredEvents = events.filter((event) => {
@@ -412,11 +540,11 @@ const EventsSection: React.FC = () => {
   // Enhanced sorting with multiple options including distance
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     if (sortBy === 'Date') {
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
+      return (a.startTimestamp || 0) - (b.startTimestamp || 0);
     } else if (sortBy === 'Popularity') {
       // Sort by attendance percentage (registered/expected)
-      const aPopularity = a.attendees.registered / a.attendees.expected;
-      const bPopularity = b.attendees.registered / b.attendees.expected;
+      const aPopularity = a.attendees.registered / (a.attendees.expected || 1);
+      const bPopularity = b.attendees.registered / (b.attendees.expected || 1);
       return bPopularity - aPopularity; // Higher percentage first
     } else if (sortBy === 'Ticket Price') {
       // Compare regular ticket prices (or minimum prices)
@@ -447,10 +575,16 @@ const EventsSection: React.FC = () => {
 
   return (
     <div className="p-6">
-      {/* Header with refresh indicator and location */}
+      {/* Header with refresh indicator, location and network info */}
       <div className="mb-8">
         <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Upcoming Events</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-1">Upcoming Events</h2>
+            <p className="text-textGray text-sm">
+              Network: {isTestnet ? 'Testnet' : 'Mainnet'}
+              {!isConnected && ' (RPC Error)'}
+            </p>
+          </div>
           <div className="flex items-center space-x-4">
             {/* Location button/indicator */}
             {userLocation ? (
@@ -471,8 +605,8 @@ const EventsSection: React.FC = () => {
                   {locationStatus === 'loading'
                     ? 'Getting location...'
                     : geoPermissionDenied
-                      ? 'Location access denied'
-                      : 'Enable location'}
+                    ? 'Location access denied'
+                    : 'Enable location'}
                 </span>
               </button>
             )}
@@ -481,9 +615,37 @@ const EventsSection: React.FC = () => {
             <span className="font-inter text-xs text-textGray">
               {isRefreshing ? 'Refreshing...' : `Last updated: ${lastUpdated.toLocaleTimeString()}`}
             </span>
+
+            {/* Manual refresh button */}
+            <button
+              onClick={() => fetchEvents(true)}
+              disabled={isRefreshing || loading}
+              className="bg-primary text-white px-3 py-1 rounded-lg text-sm disabled:opacity-50"
+            >
+              Refresh
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Network switched indicator - silent refresh */}
+      {/* No notification displayed but we still track network switch status */}
+
+      {/* Error message */}
+      {errorMessage && (
+        <div className="mb-4 p-3 bg-red-500 bg-opacity-20 border border-red-500 rounded-lg">
+          <p className="text-red-500 text-sm">{errorMessage}</p>
+          <button
+            onClick={() => {
+              setErrorMessage('');
+              fetchEvents(true);
+            }}
+            className="mt-2 text-xs text-white bg-red-500 px-3 py-1 rounded"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
 
       {/* Filters and Sort */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -492,7 +654,7 @@ const EventsSection: React.FC = () => {
             <button
               key={filter}
               onClick={() => {
-                setActiveFilter(filter as EventFilter);
+                setActiveFilter(filter);
                 // If selecting Nearby filter but no location, prompt for location
                 if (filter === 'Nearby' && !userLocation && !geoPermissionDenied) {
                   getUserLocation();
@@ -519,11 +681,7 @@ const EventsSection: React.FC = () => {
           <select
             value={sortBy}
             onChange={(e) => {
-              const newSortBy = e.target.value as
-                | 'Date'
-                | 'Popularity'
-                | 'Ticket Price'
-                | 'Distance';
+              const newSortBy = e.target.value;
               setSortBy(newSortBy);
 
               // If sorting by distance but no location, prompt for location
@@ -554,6 +712,32 @@ const EventsSection: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Event count display */}
+      {!loading && !isRefreshing && (
+        <div className="mb-4 text-sm text-textGray">
+          Showing {paginatedEvents.length} of {sortedEvents.length} events
+          {activeFilter !== 'All' ? ` (filtered by ${activeFilter})` : ''}
+          {sortBy !== 'Date' ? ` (sorted by ${sortBy})` : ''}
+        </div>
+      )}
+
+      {/* RPC connection error message */}
+      {!isConnected && (
+        <div className="mb-6 p-4 bg-red-500 bg-opacity-10 border border-red-500 rounded-lg">
+          <p className="text-red-400 font-medium mb-1">Network Connection Error</p>
+          <p className="text-sm text-red-300">
+            Cannot connect to the {isTestnet ? 'Testnet' : 'Mainnet'} RPC. Events may not be
+            up-to-date. Please check your network connection and try again.
+          </p>
+          <button
+            onClick={() => fetchEvents(true)}
+            className="mt-2 px-4 py-1 bg-red-500 text-white rounded-lg text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
 
       {/* Events Grid/List */}
       <div
@@ -601,7 +785,8 @@ const EventsSection: React.FC = () => {
             )}
             {events.length === 0 && (
               <p className="text-textGray mt-2">
-                No upcoming events available. Check back later or try refreshing the page.
+                No upcoming events available on the {isTestnet ? 'Testnet' : 'Mainnet'} network.
+                {isTestnet ? ' Try switching to Mainnet.' : ' Try again later.'}
               </p>
             )}
           </div>
