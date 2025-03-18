@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Search, Bell, Plus, ChevronDown, AlertCircle } from 'lucide-react';
 import { usePrivy, useWallets, useUser, useLogout } from '@privy-io/react-auth';
 import { Link } from 'react-router-dom';
-import { parseChainId, SUPPORTED_NETWORKS, truncateAddress } from '../../utils/utils';
-import { createPublicClientInstance, checkRPCConnection } from '../../config/client';
+import { SUPPORTED_NETWORKS, truncateAddress } from '../../utils/utils';
+import { useNetwork } from '../../contexts/NetworkContext';
 
 const Header: React.FC = () => {
   const { login, authenticated } = usePrivy();
@@ -13,17 +13,13 @@ const Header: React.FC = () => {
     onSuccess: () => console.log('User logged out'),
   });
 
+  // network context
+  const network = useNetwork();
+
   // UI state
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-
-  // Network state
-  const [networkState, setNetworkState] = useState({
-    currentNetwork: null as number | null,
-    isNetworkSwitching: false,
-    rpcStatus: { isConnected: true, checking: false },
-  });
+  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
 
   // Refs
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -33,113 +29,33 @@ const Header: React.FC = () => {
   const currentAddress = currentWallet?.address;
 
   // Network status checks
-  const isNetworkSupported = SUPPORTED_NETWORKS.some((n) => n.id === networkState.currentNetwork);
+  const isNetworkSupported = SUPPORTED_NETWORKS.some((n) => n.id === network.chainId);
 
   const shouldShowNetworkWarning =
-    authenticated && currentWallet && !isNetworkSupported && networkState.currentNetwork !== null;
+    authenticated && currentWallet && !isNetworkSupported && network.chainId !== null;
 
-  // Get current network name
-  const getCurrentNetworkName = useCallback(() => {
-    const network = SUPPORTED_NETWORKS.find((n) => n.id === networkState.currentNetwork);
-    return network ? network.name : 'Unsupported Network';
-  }, [networkState.currentNetwork]);
-
-  // Check current chain ID and RPC connection status
-  const checkNetwork = useCallback(async () => {
-    if (!authenticated || !currentWallet) return;
-
-    try {
-      // Get and parse chain ID
-      const chainId = currentWallet.chainId;
-      const numericChainId = parseChainId(chainId);
-
-      if (numericChainId === null) {
-        console.error('Unable to parse chain ID:', chainId);
-      } else {
-        setNetworkState((prev) => ({ ...prev, currentNetwork: numericChainId }));
-      }
-
-      // Check RPC connection only if we're on a supported network
-      const isSupported = SUPPORTED_NETWORKS.some((network) => network.id === numericChainId);
-
-      if (isSupported) {
-        setNetworkState((prev) => ({
-          ...prev,
-          rpcStatus: { ...prev.rpcStatus, checking: true },
-        }));
-
-        const publicClient = createPublicClientInstance();
-        const isConnected = await checkRPCConnection(publicClient);
-
-        setNetworkState((prev) => ({
-          ...prev,
-          rpcStatus: { isConnected, checking: false },
-        }));
-
-        if (!isConnected) {
-          console.warn('RPC connection is not available. Some functionality may be limited.');
-        }
-      }
-    } catch (error) {
-      console.error('Error checking network status:', error);
-      setNetworkState((prev) => ({
-        ...prev,
-        rpcStatus: { isConnected: false, checking: false },
-      }));
-    }
-  }, [authenticated, currentWallet]);
-
-  // Handle network switching - Improved for immediate feedback
+  // Handle network switching
   const switchNetwork = async (chainId: number) => {
-    if (!currentWallet || networkState.isNetworkSwitching) return;
+    if (!currentWallet || isNetworkSwitching) return;
 
     try {
-      // Set switching state immediately
-      setNetworkState((prev) => ({
-        ...prev,
-        isNetworkSwitching: true,
-        // Update the current network immediately for UI feedback
-        currentNetwork: chainId,
-      }));
+      setIsNetworkSwitching(true);
 
-      // Call the switchChain method
       await currentWallet.switchChain(chainId);
+      await network.refreshData();
 
-      // Immediately check RPC connection after switch
-      const publicClient = createPublicClientInstance();
-      const isConnected = await checkRPCConnection(publicClient);
-
-      setNetworkState((prev) => ({
-        ...prev,
-        isNetworkSwitching: false,
-        rpcStatus: { isConnected, checking: false },
-      }));
-
-      // Close the dropdown after successful switch
       setDropdownOpen(false);
-      setMobileMenuOpen(false);
     } catch (error) {
       console.error('Error switching network:', error);
-
-      // Revert to previous network state on error
-      checkNetwork();
-
-      // Show a brief alert about the failure
-      if (window.innerWidth < 640) {
-        alert(`Network switch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-
-      setNetworkState((prev) => ({
-        ...prev,
-        isNetworkSwitching: false,
-      }));
+    } finally {
+      setIsNetworkSwitching(false);
     }
   };
 
   // Handle wallet connection
   const handleConnect = async () => {
     try {
-      await login();
+       login();
       await refreshUser();
     } catch (error) {
       console.error('Error connecting wallet:', error);
@@ -152,16 +68,22 @@ const Header: React.FC = () => {
     setDropdownOpen(false);
   };
 
-  // ===== Effects =====
-
-  // Initial network check and periodic update (less frequent)
+  // Handle clicks outside dropdown
   useEffect(() => {
-    checkNetwork();
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
 
-    // Set up periodic RPC check every 60 seconds (reduced from 30)
-    const intervalId = setInterval(checkNetwork, 60000);
-    return () => clearInterval(intervalId);
-  }, [checkNetwork]);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchend', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchend', handleClickOutside);
+    };
+  }, []);
 
   // Refresh user data when wallet changes
   useEffect(() => {
@@ -170,83 +92,72 @@ const Header: React.FC = () => {
     }
   }, [authenticated, currentAddress, refreshUser]);
 
-  // Handle clicks outside dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-
-      const target = event.target as HTMLElement;
-      if (mobileMenuOpen && !target.closest('.mobile-menu') && !target.closest('.menu-toggle')) {
-        setMobileMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [mobileMenuOpen]);
-
-  // ===== Network Button Component =====
-  const NetworkButton = ({ isMobile = false }) => {
-    const buttonClasses = `${isMobile ? 'px-3 py-1 text-xs' : 'px-4 py-2 text-sm'} rounded-full ${
-      shouldShowNetworkWarning
-        ? 'bg-red-600'
-        : !networkState.rpcStatus.isConnected && isNetworkSupported
-        ? 'bg-yellow-600'
-        : 'bg-searchBg'
-    } shadow-button-inset text-white font-inter flex items-center gap-1`;
+  // UI Components
+  const NetworkButton = () => {
+    const buttonClasses = `
+      px-2 py-1 text-xs rounded-md sm:px-4 sm:py-2 sm:text-sm sm:rounded-full
+      ${
+        shouldShowNetworkWarning
+          ? 'bg-red-600'
+          : !network.isConnected && isNetworkSupported
+          ? 'bg-yellow-600'
+          : 'bg-searchBg'
+      } 
+      shadow-button-inset text-white font-inter flex items-center gap-1
+    `;
 
     return (
       <button
-        onClick={() => setDropdownOpen(!dropdownOpen)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setDropdownOpen(!dropdownOpen);
+        }}
         className={buttonClasses}
-        disabled={networkState.isNetworkSwitching}
+        disabled={isNetworkSwitching}
       >
-        <span>
-          {networkState.isNetworkSwitching
+        <span className="max-w-16 truncate sm:max-w-none">
+          {isNetworkSwitching
             ? 'Switching...'
-            : networkState.rpcStatus.checking
-            ? 'Checking...'
             : shouldShowNetworkWarning
             ? 'Wrong Network'
-            : getCurrentNetworkName()}
+            : network.networkName || 'Unsupported Network'}
         </span>
-        {!networkState.rpcStatus.isConnected &&
-          !networkState.rpcStatus.checking &&
-          isNetworkSupported && (
-            <AlertCircle className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-yellow-300 mr-1`} />
-          )}
-        <ChevronDown className={isMobile ? 'w-3 h-3' : 'w-4 h-4'} />
+        {!network.isConnected && isNetworkSupported && (
+          <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-300" />
+        )}
+        <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
       </button>
     );
   };
 
-  // Network dropdown content - unified for both mobile and desktop
   const NetworkDropdown = () => (
-    <div className="absolute right-0 w-48 bg-[#1A003B] border border-borderStroke rounded shadow-lg z-30">
+    <div
+      className="absolute right-0 mt-2 w-48 bg-[#1A003B] border border-borderStroke rounded shadow-lg z-50"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="px-3 py-2 border-b border-borderStroke">
         <p className="text-white text-xs opacity-70">Connected Account</p>
-        <p className="text-white text-xs truncate">{truncateAddress(currentAddress)}</p>
+        <p className="text-white text-xs truncate">{truncateAddress(currentAddress || '')}</p>
       </div>
 
       <div className="px-3 py-2 border-b border-borderStroke">
         <p className="text-white text-xs opacity-70 mb-1">Switch Network</p>
-        {SUPPORTED_NETWORKS.map((network) => (
+        {SUPPORTED_NETWORKS.map((networkOption) => (
           <button
-            key={network.id}
-            onClick={() => switchNetwork(network.id)}
+            key={networkOption.id}
+            onClick={(e) => {
+              e.stopPropagation();
+              switchNetwork(networkOption.id);
+            }}
             className="w-full text-left mb-1 px-2 py-1 text-xs text-white hover:bg-searchBg rounded flex items-center gap-2"
-            disabled={networkState.isNetworkSwitching || network.id === networkState.currentNetwork}
+            disabled={isNetworkSwitching || networkOption.id === network.chainId}
           >
-            <img src={network.icon} alt={network.name} className="h-4" />
-            <span>{network.name}</span>
-            {network.id === networkState.currentNetwork && (
+            <img src={networkOption.icon} alt={networkOption.name} className="h-4" />
+            <span>{networkOption.name}</span>
+            {networkOption.id === network.chainId && (
               <>
                 <span className="ml-auto text-green-400 text-xs">Active</span>
-                {!networkState.rpcStatus.isConnected && (
-                  <AlertCircle className="w-3 h-3 text-yellow-300 ml-1" />
-                )}
+                {!network.isConnected && <AlertCircle className="w-3 h-3 text-yellow-300 ml-1" />}
               </>
             )}
           </button>
@@ -254,7 +165,10 @@ const Header: React.FC = () => {
       </div>
 
       <button
-        onClick={handleLogout}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleLogout();
+        }}
         className="w-full text-left px-3 py-2 text-white text-xs hover:bg-red-700"
       >
         Disconnect Wallet
@@ -283,6 +197,7 @@ const Header: React.FC = () => {
 
         {/* Mobile Layout */}
         <div className="flex sm:hidden items-center justify-between w-full">
+          {/* Left section for mobile */}
           <div className="w-8"></div>
 
           {/* Mobile Search Toggle - Centered */}
@@ -295,22 +210,13 @@ const Header: React.FC = () => {
             </button>
           </div>
 
-          {/* Connection Button - Right aligned */}
-          <div className="relative" ref={dropdownRef}>
-            {!authenticated ? (
-              <button
-                onClick={handleConnect}
-                className="px-3 py-1 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs"
-              >
-                Connect
-              </button>
-            ) : (
-              <>
-                <NetworkButton isMobile={true} />
-                {dropdownOpen && <NetworkDropdown />}
-              </>
-            )}
-          </div>
+          {/* Right section for mobile */}
+          {authenticated && (
+            <div className="relative z-40" ref={dropdownRef}>
+              <NetworkButton />
+              {dropdownOpen && <NetworkDropdown />}
+            </div>
+          )}
         </div>
 
         {/* Mobile Search Bar (shown conditionally) */}
@@ -342,7 +248,7 @@ const Header: React.FC = () => {
               Connect Wallet
             </button>
           ) : (
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative z-40" ref={dropdownRef}>
               <NetworkButton />
               {dropdownOpen && <NetworkDropdown />}
             </div>
@@ -363,6 +269,18 @@ const Header: React.FC = () => {
             </button>
           </Link>
         </div>
+
+        {/* Mobile Connect Button (when not authenticated) */}
+        {!authenticated && (
+          <div className="sm:hidden">
+            <button
+              onClick={handleConnect}
+              className="px-2 py-1 rounded-md bg-searchBg shadow-button-inset text-white font-inter text-xs"
+            >
+              Connect
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

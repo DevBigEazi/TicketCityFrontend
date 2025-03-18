@@ -11,7 +11,7 @@ import {
   Copy,
   CheckCircle2,
 } from 'lucide-react';
-import { useUser, usePrivy, useWallets } from '@privy-io/react-auth';
+import { useUser, usePrivy, useWallets, useLogout } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { maskEmail, permanentUserIdentity, truncateAddress } from '../../utils/utils';
 import { images } from '../../constant';
@@ -36,6 +36,10 @@ const Sidebar: React.FC<SidebarProps> = () => {
   const { user } = useUser();
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
+  const { logout } = useLogout({
+    onSuccess: () => console.log('User logged out'),
+  });
+
   const navigate = useNavigate();
   const location = useLocation();
   const [activePath, setActivePath] = useState(location.pathname);
@@ -69,15 +73,16 @@ const Sidebar: React.FC<SidebarProps> = () => {
 
   // If the currentWalletAddress from the network context is available, prioritize it
   // This ensures we're showing the currently active wallet address from connected Connector
-  const displayName =
-    userNameFromGoogle ||
-    (currentWalletAddress
-      ? truncateAddress(currentWalletAddress)
-      : externalWallet
-      ? truncateAddress(externalWallet)
-      : '') ||
-    userEmailMasked ||
-    'No User';
+  const displayName = authenticated
+    ? userNameFromGoogle ||
+      (currentWalletAddress
+        ? truncateAddress(currentWalletAddress)
+        : externalWallet
+        ? truncateAddress(externalWallet)
+        : '') ||
+      userEmailMasked ||
+      'No User Info'
+    : 'No User';
 
   const handleNavigation = (path: string) => {
     setActivePath(path);
@@ -177,8 +182,17 @@ const Sidebar: React.FC<SidebarProps> = () => {
             <div className="flex justify-between items-center">
               <div className="flex flex-col">
                 <span className="text-textGray text-xs">Balance</span>
-                <span className="text-white text-sm">{tokenBalance || '0.0000'} ETH</span>
+                <span className="text-white text-sm">{tokenBalance || '0.0000'} ETN</span>
               </div>
+            </div>
+            {/* Disconnect Button */}
+            <div className="flex justify-between items-center">
+              <button
+                onClick={logout}
+                className="w-full text-left px-3 py-2 text-white text-xs hover:bg-red-700"
+              >
+                Disconnect Wallet
+              </button>
             </div>
           </div>
         )}
