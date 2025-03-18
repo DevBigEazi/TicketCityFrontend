@@ -13,7 +13,7 @@ const Header: React.FC = () => {
     onSuccess: () => console.log('User logged out'),
   });
 
-  // network context
+  // Get network context
   const network = useNetwork();
 
   // UI state
@@ -55,7 +55,7 @@ const Header: React.FC = () => {
   // Handle wallet connection
   const handleConnect = async () => {
     try {
-       login();
+      await login();
       await refreshUser();
     } catch (error) {
       console.error('Error connecting wallet:', error);
@@ -93,18 +93,14 @@ const Header: React.FC = () => {
   }, [authenticated, currentAddress, refreshUser]);
 
   // UI Components
-  const NetworkButton = () => {
-    const buttonClasses = `
-      px-2 py-1 text-xs rounded-md sm:px-4 sm:py-2 sm:text-sm sm:rounded-full
-      ${
-        shouldShowNetworkWarning
-          ? 'bg-red-600'
-          : !network.isConnected && isNetworkSupported
-          ? 'bg-yellow-600'
-          : 'bg-searchBg'
-      } 
-      shadow-button-inset text-white font-inter flex items-center gap-1
-    `;
+  const NetworkButton = ({ isMobile = false }: { isMobile?: boolean }) => {
+    const buttonClasses = `${isMobile ? 'px-3 py-1 text-xs' : 'px-4 py-2 text-sm'} rounded-full ${
+      shouldShowNetworkWarning
+        ? 'bg-red-600'
+        : !network.isConnected && isNetworkSupported
+        ? 'bg-yellow-600'
+        : 'bg-searchBg'
+    } shadow-button-inset text-white font-inter flex items-center gap-1`;
 
     return (
       <button
@@ -115,7 +111,7 @@ const Header: React.FC = () => {
         className={buttonClasses}
         disabled={isNetworkSwitching}
       >
-        <span className="max-w-16 truncate sm:max-w-none">
+        <span>
           {isNetworkSwitching
             ? 'Switching...'
             : shouldShowNetworkWarning
@@ -123,9 +119,9 @@ const Header: React.FC = () => {
             : network.networkName || 'Unsupported Network'}
         </span>
         {!network.isConnected && isNetworkSupported && (
-          <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-300" />
+          <AlertCircle className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-yellow-300 mr-1`} />
         )}
-        <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
+        <ChevronDown className={isMobile ? 'w-3 h-3' : 'w-4 h-4'} />
       </button>
     );
   };
@@ -197,7 +193,6 @@ const Header: React.FC = () => {
 
         {/* Mobile Layout */}
         <div className="flex sm:hidden items-center justify-between w-full">
-          {/* Left section for mobile */}
           <div className="w-8"></div>
 
           {/* Mobile Search Toggle - Centered */}
@@ -209,14 +204,6 @@ const Header: React.FC = () => {
               <Search className="w-5 h-5 text-white" />
             </button>
           </div>
-
-          {/* Right section for mobile */}
-          {authenticated && (
-            <div className="relative z-40" ref={dropdownRef}>
-              <NetworkButton />
-              {dropdownOpen && <NetworkDropdown />}
-            </div>
-          )}
         </div>
 
         {/* Mobile Search Bar (shown conditionally) */}
@@ -238,18 +225,18 @@ const Header: React.FC = () => {
           </div>
         )}
 
-        {/* Right Section for Desktop */}
-        <div className="hidden sm:flex items-center gap-4">
+        {/* Right Section for Desktop and Mobile*/}
+        <div className="flex items-center gap-2 sm:gap-4">
           {!authenticated ? (
             <button
               onClick={handleConnect}
-              className="px-4 py-2 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-sm"
+              className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-searchBg shadow-button-inset text-white font-inter text-xs sm:text-sm whitespace-nowrap"
             >
               Connect Wallet
             </button>
           ) : (
             <div className="relative z-40" ref={dropdownRef}>
-              <NetworkButton />
+              <NetworkButton isMobile={true} />
               {dropdownOpen && <NetworkDropdown />}
             </div>
           )}
@@ -269,18 +256,6 @@ const Header: React.FC = () => {
             </button>
           </Link>
         </div>
-
-        {/* Mobile Connect Button (when not authenticated) */}
-        {!authenticated && (
-          <div className="sm:hidden">
-            <button
-              onClick={handleConnect}
-              className="px-2 py-1 rounded-md bg-searchBg shadow-button-inset text-white font-inter text-xs"
-            >
-              Connect
-            </button>
-          </div>
-        )}
       </div>
     </header>
   );
