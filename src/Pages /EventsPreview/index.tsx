@@ -4,18 +4,18 @@ import { ArrowLeft, MapPin, Calendar, Clock, Users, AlertCircle, Loader2 } from 
 import { useWallets } from '@privy-io/react-auth';
 import { encodeFunctionData } from 'viem';
 import contractAbi from '../../abi/abi.json';
-import { pinata } from '../../utils/pinata';
-import { TICKET_CITY_ADDR } from '../../utils/client';
+import { pinata } from '../../config/pinata';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { waitForReceipt } from '../../utils/utils';
 
-// Enum for blockchain compatibility - this is only used internally by the component
-// and is not exposed to the form or preview UI
+// Enum for smart contract compatibility
 enum TicketType {
   NONE = 0,
   REGULAR = 1,
   VIP = 2,
 }
 
-// Define the form data interface without ticketType
+// form data interface without ticketType
 interface EventFormData {
   title: string;
   startDateTime: string;
@@ -23,7 +23,7 @@ interface EventFormData {
   location: string;
   description: string;
   capacity: number;
-  image: File | null | string; // Can be File (from form) or string (base64 from localStorage)
+  image: File | null | string;
   eventType: 'FREE' | 'PAID';
 }
 
@@ -60,6 +60,8 @@ const EventPreview: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { wallets } = useWallets();
+  // Use NetworkContext to get network-specific data
+  const { getActiveContractAddress, networkName, isConnected } = useNetwork();
 
   const [formData, setFormData] = useState<EventFormData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -127,34 +129,7 @@ const EventPreview: React.FC = () => {
     navigate('/create-event', { state: formData });
   };
 
-  // Function to wait for a transaction receipt
-  const waitForReceipt = async (provider: any, txHash: string) => {
-    let receipt = null;
-    let retries = 0;
-    const maxRetries = 10;
-
-    while (!receipt && retries < maxRetries) {
-      receipt = await provider.request({
-        method: 'eth_getTransactionReceipt',
-        params: [txHash],
-      });
-
-      if (!receipt) {
-        retries++;
-        console.log(`Retry ${retries}: Waiting for transaction receipt...`);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-    }
-
-    if (!receipt) {
-      throw new Error('Transaction receipt not found after maximum retries');
-    }
-
-    console.log('Final Receipt:', receipt);
-    return receipt;
-  };
-
-  // Function to create event on blockchain
+  // Function to create event
   const handleConfirm = async () => {
     if (!formData) {
       setError('No event data available');
@@ -163,6 +138,11 @@ const EventPreview: React.FC = () => {
 
     if (!walletConnected) {
       setError('Please connect your wallet to create an event');
+      return;
+    }
+
+    if (!isConnected) {
+      setError('Network connection error. Please check your network connection and try again.');
       return;
     }
 
@@ -179,6 +159,9 @@ const EventPreview: React.FC = () => {
 
       const provider = await wallet.getEthereumProvider();
       const address = wallet.address;
+
+      // Get the contract address from network context instead of hardcoded value
+      const CONTRACT_ADDRESS = getActiveContractAddress();
 
       // Upload image to IPFS
       let ipfsUrl = '';
@@ -223,7 +206,7 @@ const EventPreview: React.FC = () => {
 
       const eventTxHash = await provider.request({
         method: 'eth_sendTransaction',
-        params: [{ from: address, to: TICKET_CITY_ADDR, data: createEventData }],
+        params: [{ from: address, to: CONTRACT_ADDRESS, data: createEventData }],
       });
 
       // Wait for transaction receipt
@@ -254,7 +237,7 @@ const EventPreview: React.FC = () => {
 
           const countResult = await provider.request({
             method: 'eth_call',
-            params: [{ to: TICKET_CITY_ADDR, data: getEventCountData }, 'latest'],
+            params: [{ to: CONTRACT_ADDRESS, data: getEventCountData }, 'latest'],
           });
 
           // Parse result from hex to decimal
@@ -384,6 +367,32 @@ const EventPreview: React.FC = () => {
     );
   }
 
+  // Network error state
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-background p-8">
+        <div className="max-w-[80%] mx-auto border border-[#3A3A3A] rounded-lg shadow-button-inset p-8">
+          <h1 className="text-white text-2xl font-bold mb-4 text-center">
+            Network Connection Error
+          </h1>
+          <div className="bg-red-500/20 text-white p-4 rounded-lg mb-4 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <p>
+              Unable to connect to the blockchain network. Please check your connection and try
+              again.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/')}
+            className="w-full bg-primary text-white py-4 rounded-lg font-semibold text-lg hover:opacity-90 transition-opacity"
+          >
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Main preview display
   return (
     <div className="bg-background min-h-screen">
@@ -463,6 +472,10 @@ const EventPreview: React.FC = () => {
 
         {/* Event Type Information */}
         <div className="rounded-lg border border-[#3A3A3A] p-6 mb-8">
+          {/* Network Information */}
+          <p className="text-gray-300">
+            Current Network: <span className="text-primary">{networkName || 'Unknown'}</span>
+          </p>
           <h2 className="font-poppins text-large text-white mb-4">Event Type</h2>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -479,7 +492,7 @@ const EventPreview: React.FC = () => {
           </div>
 
           {/* Blockchain Information */}
-          <p className="text-gray-300">
+          <p className="text-gray-300 mt-4">
             When you create this event, it will be stored permanently on the blockchain. You will be
             asked to confirm this transaction with your wallet.
           </p>

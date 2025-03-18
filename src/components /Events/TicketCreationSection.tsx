@@ -1,73 +1,29 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { useWallets } from '@privy-io/react-auth';
-import {
-  createPublicClientInstance,
-  createWalletClientInstance,
-  TICKET_CITY_ADDR,
-} from '../../utils/client';
-import { formatEther, parseEther } from 'viem';
+import { parseEther, zeroAddress } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
+import { useNetwork } from '../../contexts/NetworkContext';
+import { createWalletClientInstance } from '../../config/client';
+import { safeFormatEther, truncateAddress } from '../../utils/utils';
+import { PaidTicketCategory, TicketCreationSectionProps, TicketType } from '../../types';
 
-// Define enums for ticket types to match the contract
-const EventType = {
-  FREE: 0,
-  PAID: 1,
-};
-
-const PaidTicketCategory = {
-  NONE: 0,
-  REGULAR: 1,
-  VIP: 2,
-};
-
-// Updated Event interface to be more flexible
-interface TicketCreationEvent {
-  id: number | string; // Accept both number and string to handle different sources
-  ticketType: number;
-  ticketNFTAddr: `0x${string}` | string; // Accept both Ethereum address format and regular string
-  ticketsData: {
-    hasRegularTicket: boolean;
-    hasVIPTicket: boolean;
-    regularTicketFee: bigint | string; // Accept both bigint and string to handle different sources
-    vipTicketFee: bigint | string; // Accept both bigint and string to handle different sources
-  };
-}
-
-interface TicketCreationSectionProps {
-  event: TicketCreationEvent;
-  fetchEventDetails: (showLoading?: boolean) => Promise<void>;
-  isLoading: boolean;
-  setIsLoading: (loading: boolean) => void;
-}
-
-const TicketCreationSection = ({
-  event,
-  fetchEventDetails,
-  isLoading,
-}: //setIsLoading,
-TicketCreationSectionProps) => {
+const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps) => {
   const { wallets } = useWallets();
-  const publicClient = createPublicClientInstance();
+  const {
+    getPublicClient,
+    getActiveContractAddress,
+    isTestnet,
+    chainId,
+    currentWalletAddress,
+    contractEvents,
+  } = useNetwork();
 
-  // Helper function to convert string/bigint to formatted string
-  const safeFormatEther = (value: string | bigint): string => {
-    // If it's already a string, parse it to make sure it's a valid number
-    if (typeof value === 'string') {
-      try {
-        // Try to parse it as BigInt first (for "0x..." hex strings)
-        return formatEther(BigInt(value));
-      } catch {
-        // If that fails, try to parse it as a regular number
-        return value;
-      }
-    }
-    // If it's a bigint, format it directly
-    return formatEther(value);
-  };
+  // Create public client using the network context
+  const publicClient = getPublicClient();
 
   // State for managing ticket creation
-  const [ticketState, setTicketState] = useState<TicketState>({
+  const [ticketState, setTicketState] = useState({
     type: 'REGULAR', // This is the string representation
     typeEnum: PaidTicketCategory.REGULAR, // This is the actual enum value (1 for REGULAR, 2 for VIP)
     price: 0,
@@ -78,34 +34,35 @@ TicketCreationSectionProps) => {
     imageUrl: '',
   });
 
-  const [creationStatus, setCreationStatus] = useState<{
-    loading: boolean;
-    success: boolean;
-    error: string | null;
-    currentType: string | null;
-  }>({
+  const [creationStatus, setCreationStatus] = useState({
     loading: false,
     success: false,
-    error: null,
-    currentType: null,
+    error: null as string | null,
+    currentType: null as string | null,
   });
 
-  // Handle ticket type and price changes
-  interface TicketState {
-    type: string;
-    typeEnum: number;
-    price: number;
-    regularPrice: number;
-    vipPrice: number;
-    ticketUrl: string;
-    image: File | null;
-    imageUrl: string;
-  }
+  // Validate that we have the correct wallet and network before proceeding
+  const validateNetworkAndWallet = () => {
+    if (!wallets || !wallets[0]) {
+      return 'Wallet not connected';
+    }
 
+    if (!currentWalletAddress || currentWalletAddress === zeroAddress) {
+      return 'Invalid wallet address';
+    }
+
+    if (chainId === null) {
+      return 'Network not detected';
+    }
+
+    return null; // No error
+  };
+
+  // Handle ticket type and price changes
   type TicketField = 'type' | 'regularPrice' | 'vipPrice' | 'ticketUrl';
 
   const handleTicketChange = (field: TicketField, value: string | number) => {
-    setTicketState((prevState: TicketState) => {
+    setTicketState((prevState) => {
       switch (field) {
         case 'type':
           // Update both the string type and the enum value
@@ -142,10 +99,20 @@ TicketCreationSectionProps) => {
 
   // Create ticket function with enhanced error handling
   const handleCreateTicket = async () => {
-    if (!event || !wallets[0]) {
+    // Validate network and wallet first
+    const validationError = validateNetworkAndWallet();
+    if (validationError) {
       setCreationStatus({
         ...creationStatus,
-        error: 'Event details not available or wallet not connected',
+        error: validationError,
+      });
+      return;
+    }
+
+    if (!event) {
+      setCreationStatus({
+        ...creationStatus,
+        error: 'Event details not available',
       });
       return;
     }
@@ -154,7 +121,7 @@ TicketCreationSectionProps) => {
     const eventId = typeof event.id === 'string' ? parseInt(event.id, 10) : event.id;
 
     // For PAID events, validate ticket price based on type
-    if (Number(event.ticketType) === EventType.PAID) {
+    if (Number(event.ticketType) === TicketType.PAID) {
       if (ticketState.type === 'REGULAR' && ticketState.regularPrice <= 0) {
         setCreationStatus({
           ...creationStatus,
@@ -212,11 +179,11 @@ TicketCreationSectionProps) => {
     });
 
     try {
-      // Get wallet client
+      // Get wallet client - use the isTestnet flag from network context
       const provider = await wallets[0].getEthereumProvider();
-      const walletClient = createWalletClientInstance(provider);
+      const walletClient = createWalletClientInstance(provider, isTestnet);
 
-      // Use image URL if available, otherwise use provided ticket URL
+      // Use image URL if available
       const ticketUri = ticketState.imageUrl;
 
       // Determine the appropriate ticket category and price based on event type
@@ -224,7 +191,7 @@ TicketCreationSectionProps) => {
       let ticketPrice;
 
       // Handle FREE event case
-      if (Number(event.ticketType) === EventType.FREE) {
+      if (Number(event.ticketType) === TicketType.FREE) {
         // For FREE events, use NONE (0) ticket category
         ticketCategory = PaidTicketCategory.NONE;
         ticketPrice = 0n; // Zero price for free tickets
@@ -241,20 +208,21 @@ TicketCreationSectionProps) => {
       let hash;
 
       try {
-        // Ensure wallet address is properly typed
-        const walletAddress = wallets[0].address as `0x${string}`;
+        // Get contract address from network context
+        const contractAddress = getActiveContractAddress();
+        console.log(`Creating ticket on contract: ${contractAddress} (isTestnet: ${isTestnet})`);
 
-        // Create the ticket
+        // Create the ticket using the wallet address from context
         hash = await walletClient.writeContract({
-          address: TICKET_CITY_ADDR,
+          address: contractAddress,
           abi: TICKET_CITY_ABI,
           functionName: 'createTicket',
           args: [eventId, ticketCategory, ticketPrice, ticketUri],
-          account: walletAddress,
+          account: currentWalletAddress as `0x${string}`,
         });
 
         console.log('Create ticket transaction hash:', hash);
-      } catch (walletError) {
+      } catch (walletError: any) {
         // Handle wallet rejections and other transaction initiation errors
         console.error('Transaction initiation error:', walletError);
         setCreationStatus({
@@ -295,7 +263,7 @@ TicketCreationSectionProps) => {
           });
 
           // Reset form for the next ticket type if needed
-          if (Number(event.ticketType) === EventType.PAID) {
+          if (Number(event.ticketType) === TicketType.PAID) {
             if (ticketState.type === 'REGULAR' && !event.ticketsData.hasVIPTicket) {
               setTicketState((prev) => ({
                 ...prev,
@@ -304,13 +272,10 @@ TicketCreationSectionProps) => {
               }));
             }
           }
-
-          // Refresh event details after successful creation
-          await fetchEventDetails();
         } else {
           throw new Error('Transaction failed');
         }
-      } catch (confirmationError) {
+      } catch (confirmationError: any) {
         // Handle confirmation errors (timeouts, etc.)
         console.error('Transaction confirmation error:', confirmationError);
 
@@ -334,7 +299,7 @@ TicketCreationSectionProps) => {
           });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       // Catch any other errors that might have been missed
       console.error('Error creating ticket:', error);
       setCreationStatus({
@@ -351,11 +316,11 @@ TicketCreationSectionProps) => {
   // Determine which ticket types can be created
   const canCreateRegular = !event.ticketsData.hasRegularTicket;
   const canCreateVIP = !event.ticketsData.hasVIPTicket;
-  const isFreeEvent = Number(event.ticketType) === EventType.FREE;
+  const isFreeEvent = Number(event.ticketType) === TicketType.FREE;
 
   // Automatically set the ticket type based on what's available
   useEffect(() => {
-    if (Number(event.ticketType) === EventType.PAID) {
+    if (Number(event.ticketType) === TicketType.PAID) {
       if (canCreateRegular) {
         setTicketState((prev) => ({
           ...prev,
@@ -372,6 +337,34 @@ TicketCreationSectionProps) => {
     }
   }, [event.ticketType, canCreateRegular, canCreateVIP]);
 
+  // Effect to monitor contract events and update UI accordingly
+  useEffect(() => {
+    // If we have new contract events and the component is in a success state,
+    // the event listener in the context has caught new events so we should show updated UI
+    if (contractEvents.length > 0 && creationStatus.success) {
+      // Reset status after a short delay for better UX
+      const timeoutId = setTimeout(() => {
+        setCreationStatus((prev) => ({
+          ...prev,
+          success: false,
+          currentType: null,
+        }));
+      }, 2000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [contractEvents, creationStatus.success]);
+
+  // Reset error status when network or wallet changes
+  useEffect(() => {
+    if (creationStatus.error) {
+      setCreationStatus((prev) => ({
+        ...prev,
+        error: null,
+      }));
+    }
+  }, [isTestnet, chainId, currentWalletAddress]);
+
   // For free events, render a simpler interface
   if (isFreeEvent) {
     return (
@@ -380,8 +373,7 @@ TicketCreationSectionProps) => {
           🎟️ Create Free Ticket
         </h2>
 
-        {event.ticketsData.hasRegularTicket ||
-        event.ticketNFTAddr !== '0x0000000000000000000000000000000000000000' ? (
+        {event.ticketsData.hasRegularTicket || event.ticketNFTAddr !== zeroAddress ? (
           <div className="bg-green-900/30 p-4 rounded-lg flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-400" />
             <p className="font-inter text-medium text-white">
@@ -400,6 +392,20 @@ TicketCreationSectionProps) => {
                   />
                 </div>
               )}
+            </div>
+
+            {/* Network Information */}
+            <div className="bg-primary/20 p-3 rounded-lg">
+              <p className="font-inter text-sm text-white">
+                Network: {isTestnet ? '🧪 Testnet' : '🌐 Mainnet'}{' '}
+              </p>
+              <p className="font-inter text-sm text-white">
+                Wallet:{' '}
+                {currentWalletAddress ? truncateAddress(currentWalletAddress) : 'Not connected'}
+              </p>
+              <p className="font-inter text-sm text-white">
+                Contract: {truncateAddress(getActiveContractAddress())}
+              </p>
             </div>
 
             {creationStatus.error && (
@@ -484,6 +490,20 @@ TicketCreationSectionProps) => {
       )}
 
       <div className="space-y-4">
+        {/* Network Information */}
+        <div className="bg-primary/20 p-3 rounded-lg">
+          <p className="font-inter text-sm text-white">
+            Network: {isTestnet ? '🧪 Testnet' : '🌐 Mainnet'}{' '}
+            {chainId ? `(Chain ID: ${chainId})` : ''}
+          </p>
+          <p className="font-inter text-sm text-white">
+            Wallet: {currentWalletAddress ? truncateAddress(currentWalletAddress) : 'Not connected'}
+          </p>
+          <p className="font-inter text-sm text-white">
+            Contract: {truncateAddress(getActiveContractAddress())}
+          </p>
+        </div>
+
         {/* If only one ticket type can be created, show which one */}
         {(!canCreateRegular || !canCreateVIP) && (
           <div className="bg-primary/20 p-3 rounded-lg">
