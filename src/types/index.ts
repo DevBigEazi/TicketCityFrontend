@@ -1,6 +1,6 @@
 import React from 'react';
 
-// Basic navigation and UI types
+// Navigation and UI types
 export interface NavLink {
   icon: React.ReactNode;
   label: string;
@@ -66,6 +66,37 @@ export interface Event {
   ticketsData: EventTicketsData;
 }
 
+// MyEvent interface
+export interface MyEvent {
+  id: string;
+  title: string;
+  image: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  ticketsSold: number;
+  ticketsTotal: number;
+  ticketsVerified: number;
+  hasEnded: boolean;
+  hasNotStarted: boolean;
+  isLive: boolean;
+  hasTickets: boolean;
+  revenue: number;
+  canRelease: boolean;
+  attendanceRate: number;
+}
+
+// Define Stats interface
+export interface Stats {
+  totalRevenue: number;
+  revenuePending: number;
+  refundsIssued: number;
+}
+
 // Interface specifically for the TicketCreationSection component
 export interface TicketCreationEvent {
   id: number | string;
@@ -81,6 +112,7 @@ export interface TicketCreationEvent {
 
 // UI variant of Event with formatted data for display
 export interface UIEvent {
+  startTimestamp: number;
   id: string;
   type: string;
   title: string;
@@ -157,6 +189,15 @@ export interface FooterSection {
   links: string[];
 }
 
+// Interface for network definition
+export interface SupportedNetwork {
+  id: number;
+  name: string;
+  icon: string;
+  rpcUrls: readonly string[];
+  isTestnet: boolean;
+}
+
 // API data type - matches your current EventData
 export interface EventData {
   id: number;
@@ -173,6 +214,90 @@ export interface EventData {
   expectedAttendees: number;
   imageUri: string;
   ticketsData?: EventTicketsData; // Optional because it's added after fetching
+}
+
+export interface EventFormData {
+  title: string;
+  startDateTime: string;
+  endDateTime: string;
+  location: string;
+  description: string;
+  capacity: number;
+  image: File | null;
+  eventType: 'FREE' | 'PAID';
+  ticketType: 'NONE' | 'REGULAR' | 'VIP';
+}
+
+// Interface for event objects in state
+export interface EventObjects {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  location: string;
+  date: string;
+  endDate: string;
+  price: {
+    regular: number;
+    vip: number;
+  };
+  image: string;
+  organiser: string;
+  attendees: {
+    registered: number;
+    expected: number;
+    verified: number;
+  };
+  hasEnded: boolean;
+  hasNotStarted: boolean;
+  isLive: boolean;
+  isVerified: boolean;
+  hasTicket: boolean;
+  ticketType: string;
+  startTimestamp: number;
+  endTimestamp: number;
+  rawData: EventDataStructure;
+  remainingTickets: number;
+  hasTicketCreated: boolean;
+  hasRegularTicket: boolean;
+  hasVIPTicket: boolean;
+  coordinates: { lat: number; lng: number } | null;
+  distance: number | null;
+}
+
+// Interfaces for the event data structure
+export interface EventDataStructure {
+  title: string;
+  desc: string;
+  location: string;
+  startDate: bigint;
+  endDate: bigint;
+  ticketType: number;
+  imageUri: string;
+  organiser: string;
+  userRegCount: bigint;
+  expectedAttendees: bigint;
+  verifiedAttendeesCount: bigint;
+}
+
+export interface EventTickets {
+  regularTicketFee: bigint;
+  vipTicketFee: bigint;
+}
+
+export interface TicketDetails {
+  eventIds: bigint[];
+  ticketTypes: string[];
+}
+
+export interface TicketsMap {
+  [key: string]: string;
+}
+
+export interface NetworkState {
+  isTestnet: boolean;
+  chainId: number | null;
+  isConnected: boolean;
 }
 
 // Helper type for converting between contract data and UI data
@@ -209,7 +334,7 @@ export function adaptEventForTicketCreation(event: Event): TicketCreationEvent {
   };
 }
 
-// Also fix the convertContractEventToTicketCreationEvent function
+// convertContractEventToTicketCreationEvent function
 export function convertContractEventToTicketCreationEvent(event: Event): TicketCreationEvent {
   // Safely handle the ticketType property
   let ticketTypeValue: number;

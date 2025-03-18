@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { electroneum } from 'viem/chains';
+import { electroneum, electroneumTestnet } from 'viem/chains';
 import images from './constant/images.ts';
+import { NetworkProvider } from './contexts/NetworkContext.tsx';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -12,19 +13,19 @@ createRoot(document.getElementById('root')!).render(
       appId="cm7ggplh602nev98bri6wwd57"
       config={{
         // Display wallet as login methods
-        loginMethods: ['wallet'],
+        loginMethods: ['email', 'wallet'],
         externalWallets: {
           coinbaseWallet: {
             // Valid connection options include 'all' (default), 'eoaOnly', or 'smartWalletOnly'
             connectionOptions: 'all',
           },
         },
-        supportedChains: [electroneum],
+        supportedChains: [electroneum, electroneumTestnet],
         appearance: {
           accentColor: '#FF8A00',
           theme: '#090014',
           logo: `${images.TicketCityLogo}`,
-          landingHeader: 'Make sure you switch to Electroneum network',
+          landingHeader: 'Login or Sign-up',
           showWalletLoginFirst: false,
           walletChainType: 'ethereum-only',
           walletList: [
@@ -48,7 +49,9 @@ createRoot(document.getElementById('root')!).render(
         },
       }}
     >
-      <App />
+      <NetworkProvider>
+        <App />
+      </NetworkProvider>
     </PrivyProvider>
   </StrictMode>,
 );

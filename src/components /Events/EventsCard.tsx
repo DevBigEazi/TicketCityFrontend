@@ -124,7 +124,7 @@ const EventCard: React.FC<EventCardProps> = ({
   const regularPrice = typeof price?.regular === 'number' ? price.regular : 0;
   const vipPrice = typeof price?.vip === 'number' ? price.vip : 0;
 
-  // Handle image loading errors - fixed type issue
+  // Handle image loading errors
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
     target.src = '/placeholder-event.jpg';

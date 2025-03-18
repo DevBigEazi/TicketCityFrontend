@@ -3,16 +3,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle, Share } from 'lucide-react';
 import { usePrivy, useUser, useWallets } from '@privy-io/react-auth';
-import {
-  createPublicClientInstance,
-  createWalletClientInstance,
-  TICKET_CITY_ADDR,
-} from '../../utils/client';
-import { formatEther } from 'viem';
+import { createPublicClientInstance, createWalletClientInstance } from '../../config/client';
+import { formatEther, zeroAddress } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import TicketCreationSection from '../../components /Events/TicketCreationSection';
 import EventDetailsFooter from '../../components /Events/EventDetailsFooter';
-import { pinata } from '../../utils/pinata';
+import { pinata } from '../../config/pinata';
+import { useNetwork } from '../../contexts/NetworkContext';
 
 // Import unified types
 import {
@@ -79,6 +76,9 @@ const EventDetails = () => {
   const { refreshUser } = useUser();
   const [balance, setBalance] = useState('Loading...');
 
+  // Get network context for dynamic contract address and contract events
+  const { getActiveContractAddress, isTestnet, chainId, contractEvents } = useNetwork();
+
   // Local state for event data
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,15 +92,17 @@ const EventDetails = () => {
   const [purchaseError, setPurchaseError] = useState('');
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [transactionHash, setTransactionHash] = useState('');
+  const [lastEventRefresh, setLastEventRefresh] = useState(Date.now());
 
-  const publicClient = createPublicClientInstance();
+  // Create public client using the current network context
+  const publicClient = createPublicClientInstance(isTestnet);
 
   const walletAddress =
     wallets && wallets.length > 0 && wallets[0]?.address
       ? ((wallets[0].address.startsWith('0x')
           ? wallets[0].address
           : `0x${wallets[0].address}`) as `0x${string}`)
-      : ('0x0000000000000000000000000000000000000000' as `0x${string}`);
+      : (zeroAddress as `0x${string}`);
 
   // Fetch ETN balance
   const getETNBalance = async () => {
@@ -137,9 +139,12 @@ const EventDetails = () => {
     try {
       const eventIdNumber = parseInt(eventId);
 
+      // Use the dynamic contract address from network context
+      const contractAddress = getActiveContractAddress();
+
       // Get event data from contract directly
       const eventData = (await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
+        address: contractAddress,
         abi: TICKET_CITY_ABI,
         functionName: 'getEvent',
         args: [eventIdNumber],
@@ -147,7 +152,7 @@ const EventDetails = () => {
 
       // Get ticket information
       const eventTicketsData = (await publicClient.readContract({
-        address: TICKET_CITY_ADDR,
+        address: contractAddress,
         abi: TICKET_CITY_ABI,
         functionName: 'eventTickets',
         args: [eventIdNumber],
@@ -176,7 +181,7 @@ const EventDetails = () => {
         (Number(eventData.ticketType) === TicketType.FREE ||
           Number(eventData.ticketType) === TicketType.PAID) &&
         (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
-        eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000';
+        eventData.ticketNFTAddr !== zeroAddress;
 
       setTicketCreated(hasTicketCreated);
 
@@ -184,12 +189,12 @@ const EventDetails = () => {
       // Determine if tickets have been created - different logic for FREE vs PAID events
       if (Number(eventData.ticketType) === TicketType.FREE) {
         // For FREE events, we only need the NFT contract address to be set
-        setTicketCreated(eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000');
+        setTicketCreated(eventData.ticketNFTAddr !== zeroAddress);
       } else if (Number(eventData.ticketType) === TicketType.PAID) {
         // For PAID events, we need ticket types and NFT contract
         setTicketCreated(
           (formattedTicketsData.hasRegularTicket || formattedTicketsData.hasVIPTicket) &&
-            eventData.ticketNFTAddr !== '0x0000000000000000000000000000000000000000',
+            eventData.ticketNFTAddr !== zeroAddress,
         );
       } else {
         setTicketCreated(false);
@@ -206,7 +211,7 @@ const EventDetails = () => {
         setIsOrganizer(isUserOrganizer);
 
         const hasRegistered = (await publicClient.readContract({
-          address: TICKET_CITY_ADDR,
+          address: contractAddress,
           abi: TICKET_CITY_ABI,
           functionName: 'hasRegistered',
           args: [walletAddress, eventIdNumber],
@@ -223,6 +228,9 @@ const EventDetails = () => {
       } else {
         setAttendanceRate('0%');
       }
+
+      // Update the last refresh timestamp
+      setLastEventRefresh(Date.now());
     } catch (error: any) {
       setError(`Failed to fetch event details: ${error.message || 'Unknown error'}`);
       setEvent(null); // Reset event state on error
@@ -230,6 +238,21 @@ const EventDetails = () => {
       setIsLoading(false);
     }
   };
+
+  // Watch for contract events and refresh data when they occur
+  useEffect(() => {
+    // If we have events and at least 1 second has passed since the last refresh
+    // This prevents multiple refreshes in a short period
+    if (contractEvents.length > 0 && Date.now() - lastEventRefresh > 1000) {
+      // Refresh data without showing loading state
+      loadEventDetails(false);
+
+      // Also refresh balance if authenticated
+      if (authenticated && wallets && wallets[0]?.address) {
+        getETNBalance();
+      }
+    }
+  }, [contractEvents]);
 
   // Use this effect for the initial load
   useEffect(() => {
@@ -241,6 +264,17 @@ const EventDetails = () => {
       getETNBalance();
     }
   }, [eventId, authenticated, wallets]);
+
+  // Add effect to reload data when network changes
+  useEffect(() => {
+    // Reload data when isTestnet or chainId changes
+    if (eventId) {
+      loadEventDetails(true);
+      if (authenticated && wallets && wallets[0]?.address) {
+        getETNBalance();
+      }
+    }
+  }, [isTestnet, chainId]);
 
   // Add visibility change detection to refresh data when user returns to tab
   useEffect(() => {
@@ -313,18 +347,35 @@ const EventDetails = () => {
 
       // Get wallet client
       const provider = await wallets[0].getEthereumProvider();
-      const walletClient = createWalletClientInstance(provider);
+
+      //  Passed the isTestnet value from useNetwork to createWalletClientInstance
+      const walletClient = createWalletClientInstance(provider, isTestnet);
 
       try {
-        // Ensure we have a valid wallet address (already prepared at the top)
-        // Confirm it's a proper Ethereum address format
-        if (!walletAddress || walletAddress === '0x0000000000000000000000000000000000000000') {
+        // Ensure we have a valid wallet address
+        if (!walletAddress || walletAddress === zeroAddress) {
           throw new Error('Invalid wallet address');
         }
 
-        // Purchase the ticket
+        // Get the current contract address from network context
+        const contractAddress = getActiveContractAddress();
+
+        // Get the current chainId from the wallet to verify it matches our expected chain
+        const walletChainId = await walletClient.getChainId();
+
+        // Get expected chainId based on isTestnet flag
+        const expectedChainId = isTestnet ? 5201420 : 52014; // Replace with your actual chain IDs
+
+        // Verify chain ID matches
+        if (walletChainId !== expectedChainId) {
+          throw new Error(
+            `Chain ID mismatch. Wallet is on chain ${walletChainId}, but contract expects chain ${expectedChainId}. Please switch your network in your wallet.`,
+          );
+        }
+
+        // Purchase the ticket using the dynamic contract address
         const hash = await walletClient.writeContract({
-          address: TICKET_CITY_ADDR,
+          address: contractAddress,
           abi: TICKET_CITY_ABI,
           functionName: 'purchaseTicket',
           args: [event.id, ticketCategory],
@@ -332,7 +383,7 @@ const EventDetails = () => {
           account: walletAddress,
         });
 
-        // Store transaction hash in localStorage as immediate solution
+        // Rest of the function remains the same...
         localStorage.setItem(`event_${event.id}_user_${walletAddress}_ticket_tx`, hash);
 
         // Create ticket metadata for Pinata
@@ -384,10 +435,6 @@ const EventDetails = () => {
 
           // Set transaction receipt in state
           setTransactionHash(hash);
-          // Refresh event details
-          await loadEventDetails();
-          // Update balance
-          await getETNBalance();
         } else {
           throw new Error('Transaction failed');
         }
@@ -562,6 +609,11 @@ const EventDetails = () => {
       <p className="font-inter text-medium text-white">
         💳 ETN Balance: {authenticated ? balance : 'Connect your wallet to view your ETN balance'}
       </p>
+      {isTestnet !== undefined && (
+        <p className="font-inter text-medium text-white">
+          Network: {isTestnet ? '🧪 Testnet' : '🌐 Mainnet'}
+        </p>
+      )}
     </div>
   );
 
@@ -578,9 +630,12 @@ const EventDetails = () => {
 
         setIsLoadingTicketType(true);
         try {
+          // Get current contract address from network context
+          const contractAddress = getActiveContractAddress();
+
           // Get event tickets data
           const eventTicketsData = (await publicClient.readContract({
-            address: TICKET_CITY_ADDR,
+            address: contractAddress,
             abi: TICKET_CITY_ABI,
             functionName: 'eventTickets',
             args: [event.id],
@@ -598,7 +653,7 @@ const EventDetails = () => {
 
           // Check if user has registered for the event
           const hasRegistered = await publicClient.readContract({
-            address: TICKET_CITY_ADDR,
+            address: contractAddress,
             abi: TICKET_CITY_ABI,
             functionName: 'hasRegistered',
             args: [walletAddress, event.id],
@@ -703,8 +758,9 @@ const EventDetails = () => {
           console.error('Error fetching user ticket type:', error);
           // If user is registered but we can't determine type, default to REGULAR
           try {
+            const contractAddress = getActiveContractAddress();
             const isRegistered = await publicClient.readContract({
-              address: TICKET_CITY_ADDR,
+              address: contractAddress,
               abi: TICKET_CITY_ABI,
               functionName: 'hasRegistered',
               args: [walletAddress, event.id],
@@ -725,7 +781,7 @@ const EventDetails = () => {
       };
 
       fetchUserTicketType();
-    }, [event, wallets]);
+    }, [event, wallets, isTestnet, chainId, contractEvents]); // Add contractEvents to trigger updates on contract events
 
     // Function to download ticket as an image
     const downloadTicketAsImage = () => {
@@ -884,8 +940,7 @@ const EventDetails = () => {
         <div className="mt-6 text-sm text-purple-200">
           <p className="mb-2">
             <span className="font-semibold">Ticket NFT Address:</span>{' '}
-            {event.details.ticketNFTAddr &&
-            event.details.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+            {event.details.ticketNFTAddr && event.details.ticketNFTAddr !== zeroAddress
               ? `${event.details.ticketNFTAddr.slice(0, 6)}...${event.details.ticketNFTAddr.slice(
                   -4,
                 )}`
@@ -1074,8 +1129,7 @@ const EventDetails = () => {
                 <Link className="w-5 h-5 text-white" />
                 <span className="font-inter text-medium text-white">
                   Ticket NFT:{' '}
-                  {event.details.ticketNFTAddr &&
-                  event.details.ticketNFTAddr !== '0x0000000000000000000000000000000000000000'
+                  {event.details.ticketNFTAddr && event.details.ticketNFTAddr !== zeroAddress
                     ? `${event.details.ticketNFTAddr.slice(
                         0,
                         6,
