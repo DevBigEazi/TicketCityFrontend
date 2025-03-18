@@ -1,5 +1,3 @@
-
-
 function Hub() {
   return (
     <div>Coming Soon</div>

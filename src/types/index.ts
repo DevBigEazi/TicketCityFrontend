@@ -1,6 +1,6 @@
 import React from 'react';
 
-// Basic navigation and UI types
+// Navigation and UI types
 export interface NavLink {
   icon: React.ReactNode;
   label: string;
@@ -216,6 +216,18 @@ export interface EventData {
   ticketsData?: EventTicketsData; // Optional because it's added after fetching
 }
 
+export interface EventFormData {
+  title: string;
+  startDateTime: string;
+  endDateTime: string;
+  location: string;
+  description: string;
+  capacity: number;
+  image: File | null;
+  eventType: 'FREE' | 'PAID';
+  ticketType: 'NONE' | 'REGULAR' | 'VIP';
+}
+
 // Interface for event objects in state
 export interface EventObjects {
   id: string;
@@ -322,7 +334,7 @@ export function adaptEventForTicketCreation(event: Event): TicketCreationEvent {
   };
 }
 
-// Also fix the convertContractEventToTicketCreationEvent function
+// convertContractEventToTicketCreationEvent function
 export function convertContractEventToTicketCreationEvent(event: Event): TicketCreationEvent {
   // Safely handle the ticketType property
   let ticketTypeValue: number;

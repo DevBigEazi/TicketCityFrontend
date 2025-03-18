@@ -1,17 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-interface EventFormData {
-  title: string;
-  startDateTime: string;
-  endDateTime: string;
-  location: string;
-  description: string;
-  capacity: number;
-  image: File | null;
-  eventType: 'FREE' | 'PAID';
-  ticketType: 'NONE' | 'REGULAR' | 'VIP';
-}
+import { EventFormData } from '../../types';
 
 interface CreateEventFormComponentProps {
   onContinue?: (formData: EventFormData) => Promise<void>;
@@ -23,7 +12,7 @@ const initialFormState: EventFormData = {
   endDateTime: '',
   location: '',
   description: '',
-  capacity: 0, // This will stay at 0 but won't be displayed
+  capacity: 0,
   image: null,
   eventType: 'FREE',
   ticketType: 'NONE',
