@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle, Share } from 'lucide-react';
 import { usePrivy, useUser, useWallets } from '@privy-io/react-auth';
-import { createPublicClientInstance, createWalletClientInstance } from '../../utils/client';
+import { createPublicClientInstance, createWalletClientInstance } from '../../config/client';
 import { formatEther, zeroAddress } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import TicketCreationSection from '../../components /Events/TicketCreationSection';
 import EventDetailsFooter from '../../components /Events/EventDetailsFooter';
-import { pinata } from '../../utils/pinata';
+import { pinata } from '../../config/pinata';
 import { useNetwork } from '../../contexts/NetworkContext';
 
 // Import unified types
@@ -76,8 +76,8 @@ const EventDetails = () => {
   const { refreshUser } = useUser();
   const [balance, setBalance] = useState('Loading...');
 
-  // Get network context for dynamic contract address
-  const { getActiveContractAddress, isTestnet, chainId } = useNetwork();
+  // Get network context for dynamic contract address and contract events
+  const { getActiveContractAddress, isTestnet, chainId, contractEvents } = useNetwork();
 
   // Local state for event data
   const [event, setEvent] = useState<Event | null>(null);
@@ -92,6 +92,7 @@ const EventDetails = () => {
   const [purchaseError, setPurchaseError] = useState('');
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [transactionHash, setTransactionHash] = useState('');
+  const [lastEventRefresh, setLastEventRefresh] = useState(Date.now());
 
   // Create public client using the current network context
   const publicClient = createPublicClientInstance(isTestnet);
@@ -227,6 +228,9 @@ const EventDetails = () => {
       } else {
         setAttendanceRate('0%');
       }
+
+      // Update the last refresh timestamp
+      setLastEventRefresh(Date.now());
     } catch (error: any) {
       setError(`Failed to fetch event details: ${error.message || 'Unknown error'}`);
       setEvent(null); // Reset event state on error
@@ -234,6 +238,21 @@ const EventDetails = () => {
       setIsLoading(false);
     }
   };
+
+  // Watch for contract events and refresh data when they occur
+  useEffect(() => {
+    // If we have events and at least 1 second has passed since the last refresh
+    // This prevents multiple refreshes in a short period
+    if (contractEvents.length > 0 && Date.now() - lastEventRefresh > 1000) {
+      // Refresh data without showing loading state
+      loadEventDetails(false);
+
+      // Also refresh balance if authenticated
+      if (authenticated && wallets && wallets[0]?.address) {
+        getETNBalance();
+      }
+    }
+  }, [contractEvents]);
 
   // Use this effect for the initial load
   useEffect(() => {
@@ -328,17 +347,31 @@ const EventDetails = () => {
 
       // Get wallet client
       const provider = await wallets[0].getEthereumProvider();
-      const walletClient = createWalletClientInstance(provider);
+
+      //  Passed the isTestnet value from useNetwork to createWalletClientInstance
+      const walletClient = createWalletClientInstance(provider, isTestnet);
 
       try {
-        // Ensure we have a valid wallet address (already prepared at the top)
-        // Confirm it's a proper Ethereum address format
+        // Ensure we have a valid wallet address
         if (!walletAddress || walletAddress === zeroAddress) {
           throw new Error('Invalid wallet address');
         }
 
         // Get the current contract address from network context
         const contractAddress = getActiveContractAddress();
+
+        // Get the current chainId from the wallet to verify it matches our expected chain
+        const walletChainId = await walletClient.getChainId();
+
+        // Get expected chainId based on isTestnet flag
+        const expectedChainId = isTestnet ? 5201420 : 52014; // Replace with your actual chain IDs
+
+        // Verify chain ID matches
+        if (walletChainId !== expectedChainId) {
+          throw new Error(
+            `Chain ID mismatch. Wallet is on chain ${walletChainId}, but contract expects chain ${expectedChainId}. Please switch your network in your wallet.`,
+          );
+        }
 
         // Purchase the ticket using the dynamic contract address
         const hash = await walletClient.writeContract({
@@ -350,7 +383,7 @@ const EventDetails = () => {
           account: walletAddress,
         });
 
-        // Store transaction hash in localStorage as immediate solution
+        // Rest of the function remains the same...
         localStorage.setItem(`event_${event.id}_user_${walletAddress}_ticket_tx`, hash);
 
         // Create ticket metadata for Pinata
@@ -402,10 +435,6 @@ const EventDetails = () => {
 
           // Set transaction receipt in state
           setTransactionHash(hash);
-          // Refresh event details
-          await loadEventDetails();
-          // Update balance
-          await getETNBalance();
         } else {
           throw new Error('Transaction failed');
         }
@@ -752,7 +781,7 @@ const EventDetails = () => {
       };
 
       fetchUserTicketType();
-    }, [event, wallets, isTestnet, chainId]); // Add network dependencies
+    }, [event, wallets, isTestnet, chainId, contractEvents]); // Add contractEvents to trigger updates on contract events
 
     // Function to download ticket as an image
     const downloadTicketAsImage = () => {

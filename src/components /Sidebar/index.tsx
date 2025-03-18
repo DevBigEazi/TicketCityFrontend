@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { maskEmail, permanentUserIdentity, truncateAddress } from '../../utils/generalUtils';
+import { maskEmail, permanentUserIdentity, truncateAddress } from '../../utils/utils';
 import { images } from '../../constant';
 
 const navLinks = [
@@ -24,6 +24,7 @@ const navLinks = [
   { icon: <Building2 />, label: 'Hub', path: '/organizers' },
   { icon: <Settings />, label: 'Settings', path: '/settings' },
 ];
+
 interface SidebarProps {
   onNavigate: (path: string) => void;
   currentPath: string;
@@ -47,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = () => {
   // Only mask email if it exists
   const userEmailMasked = userEmail ? maskEmail(userEmail) : '';
 
-  // Change the logic to check if any user information exists before trying to display it
+  // if any user information exists before trying to display it
   const displayName =
     userNameFromGoogle ||
     (externalWallet ? truncateAddress(externalWallet) : '') ||

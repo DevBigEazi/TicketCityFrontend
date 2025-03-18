@@ -106,7 +106,7 @@ export const safeContractRead = async (
         `Cannot connect to Electroneum ${networkType} RPC. The network might be unavailable.`,
       );
     }
-    
+
     return await client.readContract(options);
   } catch (error: any) {
     console.error('Contract read failed:', error);
@@ -123,14 +123,14 @@ export const getContractAddress = (isTestnet = false): `0x${string}` => {
   // Force the parameter to be a boolean to avoid any type coercion issues
   const useTestnet = Boolean(isTestnet);
 
-  // Log what we're doing for debugging
-  console.log(`Getting contract address for network: ${useTestnet ? 'testnet' : 'mainnet'}`);
+  //debugging
+  //  console.log(`Getting contract address for network: ${useTestnet ? 'testnet' : 'mainnet'}`);
 
   // Make sure we're selecting the right address
   const contractAddress = useTestnet ? TICKET_CITY_ADDR.testnet : TICKET_CITY_ADDR.mainnet;
 
   // Log the selected address
-  console.log(`Selected contract address: ${contractAddress}`);
+  //   console.log(`Selected contract address: ${contractAddress}`);
 
   return contractAddress as `0x${string}`;
 };

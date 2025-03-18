@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Calendar, Ticket, RefreshCw, QrCode } from 'lucide-react';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { safeContractRead } from '../../utils/client';
+import { safeContractRead } from '../../config/client';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { MyEvent, Stats } from '../../types';
 
@@ -21,8 +21,11 @@ const MyEvents = () => {
     revenuePending: 0,
     refundsIssued: 0,
   });
+
+  // Refs to track state changes
   const initialDataLoaded = useRef<boolean>(false);
   const previousChainIdRef = useRef<number | null>(null);
+  const previousContractAddressRef = useRef<string | null>(null);
 
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
@@ -37,9 +40,12 @@ const MyEvents = () => {
     tokenBalance,
     currentWalletAddress,
     checkRPCStatus,
-    refreshData,
     networkName,
+    contractEvents,
   } = useNetwork();
+
+  // Get the current contract address
+  const currentContractAddress = getActiveContractAddress();
 
   // Get ETN Balance using NetworkContext
   const getETNBalance = useCallback(() => {
@@ -50,6 +56,13 @@ const MyEvents = () => {
       setBalance('••••');
     }
   }, [tokenBalance]);
+
+  // Manual refresh function
+  const handleManualRefresh = useCallback(() => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    fetchAllEventData();
+  }, [isRefreshing]);
 
   // Fetch events with tickets using the optimized contract function
   const fetchEventsWithTickets = useCallback(async () => {
@@ -71,6 +84,8 @@ const MyEvents = () => {
       // Get client and contract address
       const publicClient = getPublicClient();
       const contractAddress = getActiveContractAddress();
+
+      console.log(`Fetching events with tickets using contract address: ${contractAddress}`);
 
       // Use the contract function to get events with tickets
       const eventsWithTicketIds = (await safeContractRead(
@@ -278,6 +293,8 @@ const MyEvents = () => {
       const publicClient = getPublicClient();
       const contractAddress = getActiveContractAddress();
 
+      console.log(`Fetching events without tickets using contract address: ${contractAddress}`);
+
       // Call the smart contract function to get events without tickets
       const eventsWithoutTicketIds = await safeContractRead(
         publicClient,
@@ -447,30 +464,40 @@ const MyEvents = () => {
       fetchAllEventData();
       initialDataLoaded.current = true;
 
-      // Initialize chainId reference
+      // Initialize chainId and contract address references
       previousChainIdRef.current = chainId;
+      previousContractAddressRef.current = currentContractAddress;
     } else if (!authenticated || wallets?.length === 0) {
       setBalance('••••');
       setLoading(false);
-      // Reset the ref if wallet disconnects
+      // Reset the refs if wallet disconnects
       initialDataLoaded.current = false;
+      previousChainIdRef.current = null;
+      previousContractAddressRef.current = null;
     }
-  }, [authenticated, wallets?.length, fetchAllEventData, chainId]);
+  }, [authenticated, wallets?.length, fetchAllEventData, chainId, currentContractAddress]);
 
-  // Monitor network changes and refresh data when network changes
+  // Monitor network changes and refresh data when network or contract address changes
   useEffect(() => {
     // Skip if not initialized yet
-    if (previousChainIdRef.current === null) {
+    if (previousChainIdRef.current === null || previousContractAddressRef.current === null) {
       previousChainIdRef.current = chainId;
+      previousContractAddressRef.current = currentContractAddress;
       return;
     }
 
-    // Check if chain ID has changed
-    if (previousChainIdRef.current !== chainId) {
-      console.log(`Network changed from chain ID ${previousChainIdRef.current} to ${chainId}`);
+    // Check if chain ID or contract address has changed
+    const chainChanged = previousChainIdRef.current !== chainId;
+    const contractAddressChanged = previousContractAddressRef.current !== currentContractAddress;
 
-      // Update reference
+    if (chainChanged || contractAddressChanged) {
+      console.log(`Network or contract address changed:`);
+      console.log(`- Chain ID: ${previousChainIdRef.current} → ${chainId}`);
+      console.log(`- Contract: ${previousContractAddressRef.current} → ${currentContractAddress}`);
+
+      // Update references
       previousChainIdRef.current = chainId;
+      previousContractAddressRef.current = currentContractAddress;
 
       // Clear events to avoid showing wrong data during transition
       setEvents([]);
@@ -480,24 +507,20 @@ const MyEvents = () => {
       setLoading(true);
 
       // Refresh data
-      refreshData();
       fetchAllEventData();
     } else if (initialDataLoaded.current && !isConnected) {
       // Network connection lost
       fetchAllEventData();
     }
-  }, [chainId, isTestnet, isConnected, fetchAllEventData, initialDataLoaded, refreshData]);
+  }, [chainId, isTestnet, isConnected, currentContractAddress, fetchAllEventData]);
 
-  // Manual refresh handler
-  const handleManualRefresh = () => {
-    if (isRefreshing) return;
-
-    console.log('Manual refresh triggered');
-    setIsRefreshing(true);
-
-    refreshData(); // Use the NetworkContext refreshData method
-    fetchAllEventData();
-  };
+  // Listen for contract events and update data accordingly
+  useEffect(() => {
+    if (contractEvents && contractEvents.length > 0 && initialDataLoaded.current) {
+      console.log('Contract events detected, refreshing event data...');
+      fetchAllEventData();
+    }
+  }, [contractEvents, fetchAllEventData]);
 
   // Filter events based on active tab
   const filteredEvents = events.filter((event) => {
@@ -555,10 +578,13 @@ const MyEvents = () => {
             <button
               onClick={handleManualRefresh}
               disabled={isRefreshing}
-              className="bg-transparent border border-primary text-primary rounded-lg px-4 py-2 font-poppins hover:bg-primary/10 transition-colors flex items-center gap-2"
+              className="flex items-center justify-center bg-primary/20 p-2 rounded-lg hover:bg-primary/30 transition-colors"
+              title="Refresh Data"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              <RefreshCw
+                size={20}
+                className={`text-primary ${isRefreshing ? 'animate-spin' : ''}`}
+              />
             </button>
           </div>
         </div>

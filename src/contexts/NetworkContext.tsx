@@ -5,8 +5,9 @@ import {
   createPublicClientInstance,
   getContractAddress,
   checkRPCConnection,
-} from '../utils/client';
-import { parseChainId, isTestnetById, getNetworkById } from '../utils/generalUtils';
+} from '../config/client';
+import { parseChainId, isTestnetById, getNetworkById } from '../utils/utils';
+import TICKET_CITY_ABI from '../abi/abi.json';
 
 // NetworkContext type
 export interface NetworkContextType {
@@ -21,12 +22,12 @@ export interface NetworkContextType {
   refreshData: () => Promise<void>;
   networkName: string;
   connectionStatus: string;
+  contractEvents: any[]; // Added to store contract events
 }
 
-// Create the context with a default value
+//  context with a default value
 const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
 
-// Provider component
 export const NetworkProvider = ({ children }: { children: ReactNode }) => {
   const [networkState, setNetworkState] = useState<{
     isTestnet: boolean;
@@ -39,6 +40,7 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const [tokenBalance, setTokenBalance] = useState<string>('Loading...');
+  const [contractEvents, setContractEvents] = useState<any[]>([]); // State to store contract events
 
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
@@ -129,12 +131,47 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [wallets, getPublicClient, currentWalletAddress]);
 
+  // Setup contract event listener
+  const setupContractEventListener = useCallback(async () => {
+    if (!authenticated || !wallet || !networkState.isConnected) return;
+
+    try {
+      const publicClient = getPublicClient();
+      const contractAddress = getActiveContractAddress();
+
+      // Get contract events
+      const logs = await publicClient.getContractEvents({
+        abi: TICKET_CITY_ABI,
+        address: contractAddress,
+      });
+
+      console.log('Contract events:', logs);
+      setContractEvents(logs);
+
+      // Setup event listener for future events
+      const unwatch = publicClient.watchContractEvent({
+        abi: TICKET_CITY_ABI,
+        address: contractAddress,
+        onLogs: (logs) => {
+          console.log('New contract events:', logs);
+          setContractEvents((prevLogs) => [...prevLogs, ...logs]);
+        },
+      });
+
+      // Return unwatch function to clean up listener when needed
+      return unwatch;
+    } catch (error) {
+      console.error('Error setting up contract event listener:', error);
+    }
+  }, [authenticated, wallet, networkState.isConnected, getPublicClient, getActiveContractAddress]);
+
   // Refresh all network data
   const refreshData = useCallback(async () => {
     await detectNetwork();
     await checkRPCStatus();
     await getETNBalance();
-  }, [detectNetwork, checkRPCStatus, getETNBalance]);
+    await setupContractEventListener();
+  }, [detectNetwork, checkRPCStatus, getETNBalance, setupContractEventListener]);
 
   // Get human-readable network info
   const getNetworkName = useCallback(() => {
@@ -167,12 +204,22 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [authenticated, wallet, detectNetwork]);
 
-  // Set up polling for updates
+  // Set up polling for updates and contract event listener
   useEffect(() => {
     if (authenticated && currentWalletAddress) {
       // Initial check
       checkRPCStatus();
       getETNBalance();
+
+      // Setup contract event listener
+      let unwatchEvents: (() => void) | undefined;
+
+      // Only set up event listener if connected to network
+      if (networkState.isConnected) {
+        setupContractEventListener().then((unwatch) => {
+          unwatchEvents = unwatch;
+        });
+      }
 
       // Set up interval for periodic checks
       const intervalId = setInterval(() => {
@@ -180,9 +227,19 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
         getETNBalance();
       }, 30000); // Every 30 seconds
 
-      return () => clearInterval(intervalId);
+      return () => {
+        clearInterval(intervalId);
+        if (unwatchEvents) unwatchEvents();
+      };
     }
-  }, [authenticated, currentWalletAddress, checkRPCStatus, getETNBalance]);
+  }, [
+    authenticated,
+    currentWalletAddress,
+    checkRPCStatus,
+    getETNBalance,
+    setupContractEventListener,
+    networkState.isConnected,
+  ]);
 
   // Effect for network changes
   useEffect(() => {
@@ -190,6 +247,7 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
       // Refresh data after network change
       const timeoutId = setTimeout(() => {
         getETNBalance();
+        setupContractEventListener();
       }, 2000);
 
       return () => clearTimeout(timeoutId);
@@ -200,6 +258,7 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     networkState.chainId,
     networkState.isTestnet,
     getETNBalance,
+    setupContractEventListener,
   ]);
 
   // Context value
@@ -215,6 +274,7 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     refreshData,
     networkName: getNetworkName(),
     connectionStatus: getConnectionStatus(),
+    contractEvents,
   };
 
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;

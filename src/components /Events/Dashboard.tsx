@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Copy, CheckCircle, Clock, Wallet } from 'lucide-react';
+import { Copy, CheckCircle, Clock, Wallet } from 'lucide-react';
 import EventCard from './EventsCard';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { safeContractRead } from '../../utils/client';
+import { safeContractRead } from '../../config/client';
 import { encodeFunctionData } from 'viem';
-import { formatDate, truncateAddress } from '../../utils/generalUtils';
+import { formatDate, truncateAddress } from '../../utils/utils';
 import {
   EventDataStructure,
   EventObjects,
@@ -20,7 +20,6 @@ const Dashboard = () => {
   const [viewMode] = useState<'grid' | 'list'>('grid');
   const [events, setEvents] = useState<EventObjects[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [userTickets, setUserTickets] = useState<TicketsMap>({});
   const [copyStatus, setCopyStatus] = useState(false);
   const [ticketStats, setTicketStats] = useState({
@@ -41,7 +40,7 @@ const Dashboard = () => {
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
 
-  // Network context 
+  // Network context
   const {
     isTestnet,
     chainId,
@@ -51,9 +50,9 @@ const Dashboard = () => {
     getPublicClient,
     getActiveContractAddress,
     checkRPCStatus,
-    refreshData,
     networkName,
     connectionStatus,
+    contractEvents,
   } = useNetwork();
 
   // Main data fetching function
@@ -280,17 +279,8 @@ const Dashboard = () => {
     } catch (error) {
     } finally {
       setLoading(false);
-      setIsRefreshing(false);
     }
-  }, [
-    getPublicClient,
-    getActiveContractAddress,
-    formatDate,
-    events,
-    currentWalletAddress,
-    isTestnet,
-    checkRPCStatus,
-  ]);
+  }, [getPublicClient, getActiveContractAddress, currentWalletAddress, isTestnet, checkRPCStatus]);
 
   // Watch for wallet changes and update data accordingly
   useEffect(() => {
@@ -325,41 +315,25 @@ const Dashboard = () => {
     handleWalletChanges();
   }, [authenticated, wallets, fetchUserData]);
 
+  // Watch for contract events from NetworkContext and update data
+  useEffect(() => {
+    if (authenticated && currentWalletAddress && contractEvents.length > 0) {
+      // Only refresh data when relevant contract events are detected
+      fetchUserData();
+    }
+  }, [authenticated, currentWalletAddress, contractEvents, fetchUserData]);
+
   // Quick refresh after network switch
   useEffect(() => {
     if (authenticated && currentWalletAddress) {
       // refresh to ensure data is loaded
       const timeoutId = setTimeout(() => {
         fetchUserData();
-      }, 3000); // 3 seconds refresh after switch
+      }, 1000); // 1 seconds refresh after switch
 
       return () => clearTimeout(timeoutId);
     }
-  }, [authenticated, currentWalletAddress, chainId, isTestnet]);
-
-  // Set up polling for updates to ensure real-time data
-  useEffect(() => {
-    if (authenticated && currentWalletAddress) {
-      // Set up interval to refresh data
-      const intervalId = setInterval(() => {
-        // Only refresh if not already refreshing
-        if (!isRefreshing) {
-          checkRPCStatus();
-        }
-      }, 30000); // Every 30 seconds
-
-      return () => clearInterval(intervalId);
-    }
-  }, [authenticated, currentWalletAddress, isRefreshing, checkRPCStatus]);
-
-  // Manual refresh handler
-  const handleManualRefresh = () => {
-    if (isRefreshing) return;
-
-    setIsRefreshing(true);
-    refreshData();
-    fetchUserData();
-  };
+  }, [authenticated, currentWalletAddress, chainId, isTestnet, fetchUserData]);
 
   // Function to wait for a transaction receipt
   const waitForReceipt = async (provider: any, txHash: string) => {
@@ -579,16 +553,6 @@ const Dashboard = () => {
               Network connection error. Some features may not work.
             </p>
           )}
-        </div>
-        <div className="flex items-center">
-          <button
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 text-textGray hover:text-white p-2 rounded-lg hover:bg-searchBg disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="font-inter text-xs text-textGray">Refresh</span>
-          </button>
         </div>
       </div>
 

@@ -4,13 +4,12 @@ import EventCard from './EventsCard';
 import { useNetwork } from '../../contexts/NetworkContext';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { calculateDistance, geocodeLocation } from '../../utils/locationMap';
-import { formatDate, formatDistance } from '../../utils/generalUtils';
-import { safeContractRead } from '../../utils/client';
+import { formatDate, formatDistance } from '../../utils/utils';
+import { safeContractRead } from '../../config/client';
 import { UIEvent, EventFilter } from '../../types';
 import { zeroAddress } from 'viem';
 
 const ITEMS_PER_PAGE = 9;
-const REFRESH_INTERVAL = 30000; // 30 seconds
 
 // Filters to match contract's ticket type categories
 const filters: EventFilter[] = [
@@ -32,8 +31,8 @@ const EventsSection: React.FC = () => {
     isConnected,
     getPublicClient,
     getActiveContractAddress,
-    checkRPCStatus,
     refreshData,
+    contractEvents,
   } = useNetwork();
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -47,8 +46,6 @@ const EventsSection: React.FC = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoPermissionDenied, setGeoPermissionDenied] = useState<boolean>(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState<boolean>(false);
-  const [quickRefreshComplete, setQuickRefreshComplete] = useState<boolean>(false);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [locationStatus, setLocationStatus] = useState<string>('idle');
   const [networkSwitched, setNetworkSwitched] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -131,7 +128,7 @@ const EventsSection: React.FC = () => {
     );
   };
 
-  // Fetch events from blockchain with better network handling
+  // Fetch events from blockchain
   const fetchEvents = useCallback(
     async (showLoadingState = true): Promise<void> => {
       if (showLoadingState) {
@@ -141,28 +138,14 @@ const EventsSection: React.FC = () => {
         setIsRefreshing(true);
       }
 
-      // First, check if RPC is connected
-      const rpcConnected = await checkRPCStatus();
-      if (!rpcConnected) {
-        setErrorMessage(
-          'Cannot connect to the network. Please check your connection and try again.',
-        );
-        if (showLoadingState) {
-          setLoading(false);
-        } else {
-          setIsRefreshing(false);
-        }
-        return;
-      }
-
       // Get the public client based on current network
       const publicClient = getPublicClient();
 
       // Get the correct contract address based on current network
       const contractAddress = getActiveContractAddress();
 
-      console.log(`Fetching events for network: ${isTestnet ? 'Testnet' : 'Mainnet'}`);
-      console.log(`Using contract address: ${contractAddress}`);
+      //   console.log(`Fetching events for network: ${isTestnet ? 'Testnet' : 'Mainnet'}`);
+      //   console.log(`Using contract address: ${contractAddress}`);
 
       try {
         // Get valid event IDs using safeContractRead
@@ -407,7 +390,6 @@ const EventsSection: React.FC = () => {
       getActiveContractAddress,
       userLocation,
       networkSwitched,
-      checkRPCStatus,
     ],
   );
 
@@ -447,44 +429,15 @@ const EventsSection: React.FC = () => {
 
     // Set initial chain ID reference
     previousChainIdRef.current = chainId;
-
-    // Clean up on unmount
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
   }, []);
 
-  // Quick refresh after initial load
+  // Watch for contract events from NetworkContext and update data when they occur
   useEffect(() => {
-    if (!initialLoadComplete) return;
-
-    // One-time quick refresh
-    const quickRefreshTimeout = setTimeout(() => {
-      fetchEvents(false).then(() => {
-        setQuickRefreshComplete(true);
-      });
-    }, 100);
-
-    return () => clearTimeout(quickRefreshTimeout);
-  }, [initialLoadComplete, fetchEvents]);
-
-  // Normal polling after quick refresh
-  useEffect(() => {
-    if (!quickRefreshComplete) return;
-
-    // Set up interval for normal polling
-    pollIntervalRef.current = setInterval(() => {
+    if (initialLoadComplete && contractEvents.length > 0) {
+      // Refresh data when new contract events are detected
       fetchEvents(false);
-    }, REFRESH_INTERVAL);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [quickRefreshComplete, fetchEvents]);
+    }
+  }, [initialLoadComplete, contractEvents, fetchEvents]);
 
   // Handle cached location status
   useEffect(() => {
@@ -526,7 +479,7 @@ const EventsSection: React.FC = () => {
     if (activeFilter === 'All') return true;
     if (activeFilter === 'Free' && event.type === 'Free') return true;
     if (activeFilter === 'Paid' && event.type !== 'Free') return true;
-    // Fix for VIP filter - check both event type and hasVIPTicket flag
+    // check both event type and hasVIPTicket flag
     if (activeFilter === 'VIP' && (event.type === 'VIP' || event.hasVIPTicket)) return true;
     if (activeFilter === 'Regular' && event.hasRegularTicket && event.price.regular > 0)
       return true;
@@ -617,15 +570,6 @@ const EventsSection: React.FC = () => {
             <span className="font-inter text-xs text-textGray">
               {isRefreshing ? 'Refreshing...' : `Last updated: ${lastUpdated.toLocaleTimeString()}`}
             </span>
-
-            {/* Manual refresh button */}
-            <button
-              onClick={() => fetchEvents(true)}
-              disabled={isRefreshing || loading}
-              className="bg-primary text-white px-3 py-1 rounded-lg text-sm disabled:opacity-50"
-            >
-              Refresh
-            </button>
           </div>
         </div>
       </div>
@@ -718,23 +662,6 @@ const EventsSection: React.FC = () => {
           Showing {paginatedEvents.length} of {sortedEvents.length} events
           {activeFilter !== 'All' ? ` (filtered by ${activeFilter})` : ''}
           {sortBy !== 'Date' ? ` (sorted by ${sortBy})` : ''}
-        </div>
-      )}
-
-      {/* RPC connection error message */}
-      {!isConnected && (
-        <div className="mb-6 p-4 bg-red-500 bg-opacity-10 border border-red-500 rounded-lg">
-          <p className="text-red-400 font-medium mb-1">Network Connection Error</p>
-          <p className="text-sm text-red-300">
-            Cannot connect to the {isTestnet ? 'Testnet' : 'Mainnet'} RPC. Events may not be
-            up-to-date. Please check your network connection and try again.
-          </p>
-          <button
-            onClick={() => fetchEvents(true)}
-            className="mt-2 px-4 py-1 bg-red-500 text-white rounded-lg text-sm"
-          >
-            Try Again
-          </button>
         </div>
       )}
 

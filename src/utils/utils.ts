@@ -1,6 +1,7 @@
 import { electroneum, electroneumTestnet } from 'viem/chains';
 import { images } from '../constant';
 import { SupportedNetwork } from '../types';
+import { formatEther } from 'viem';
 
 /**
  * Parse chain ID from various formats to numeric value
@@ -29,6 +30,22 @@ export const parseChainId = (chainId: string | number | undefined): number | nul
     console.error(`Error parsing chainId ${chainId}:`, error);
     return null;
   }
+};
+
+// Helper function to convert string/bigint to formatted string
+export const safeFormatEther = (value: string | bigint): string => {
+  // If it's already a string, parse it to make sure it's a valid number
+  if (typeof value === 'string') {
+    try {
+      // Try to parse it as BigInt first (for "0x..." hex strings)
+      return formatEther(BigInt(value));
+    } catch {
+      // If that fails, try to parse it as a regular number
+      return value;
+    }
+  }
+  // If it's a bigint, format it directly
+  return formatEther(value);
 };
 
 // Supported networks using the chain object from viem
@@ -181,4 +198,29 @@ export const formatDistance = (distance: number | null): string => {
   } else {
     return `${distance.toFixed(0)} km`;
   }
+};
+
+// Function to wait for a transaction receipt
+export const waitForReceipt = async (provider: any, txHash: string) => {
+  let receipt = null;
+  let retries = 0;
+  const maxRetries = 10;
+
+  while (!receipt && retries < maxRetries) {
+    receipt = await provider.request({
+      method: 'eth_getTransactionReceipt',
+      params: [txHash],
+    });
+
+    if (!receipt) {
+      retries++;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  if (!receipt) {
+    throw new Error('Transaction receipt not found after maximum retries');
+  }
+
+  return receipt;
 };

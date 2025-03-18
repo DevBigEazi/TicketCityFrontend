@@ -4,8 +4,9 @@ import { ArrowLeft, MapPin, Calendar, Clock, Users, AlertCircle, Loader2 } from 
 import { useWallets } from '@privy-io/react-auth';
 import { encodeFunctionData } from 'viem';
 import contractAbi from '../../abi/abi.json';
-import { pinata } from '../../utils/pinata';
+import { pinata } from '../../config/pinata';
 import { useNetwork } from '../../contexts/NetworkContext';
+import { waitForReceipt } from '../../utils/utils';
 
 // Enum for smart contract compatibility
 enum TicketType {
@@ -126,33 +127,6 @@ const EventPreview: React.FC = () => {
 
   const handleGoBack = () => {
     navigate('/create-event', { state: formData });
-  };
-
-  // Function to wait for a transaction receipt
-  const waitForReceipt = async (provider: any, txHash: string) => {
-    let receipt = null;
-    let retries = 0;
-    const maxRetries = 10;
-
-    while (!receipt && retries < maxRetries) {
-      receipt = await provider.request({
-        method: 'eth_getTransactionReceipt',
-        params: [txHash],
-      });
-
-      if (!receipt) {
-        retries++;
-        console.log(`Retry ${retries}: Waiting for transaction receipt...`);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-    }
-
-    if (!receipt) {
-      throw new Error('Transaction receipt not found after maximum retries');
-    }
-
-    console.log('Final Receipt:', receipt);
-    return receipt;
   };
 
   // Function to create event

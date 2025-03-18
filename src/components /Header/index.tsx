@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Search, Bell, Plus, ChevronDown, AlertCircle } from 'lucide-react';
 import { usePrivy, useWallets, useUser, useLogout } from '@privy-io/react-auth';
 import { Link } from 'react-router-dom';
-import { parseChainId, SUPPORTED_NETWORKS, truncateAddress } from '../../utils/generalUtils';
-import { createPublicClientInstance, checkRPCConnection } from '../../utils/client';
+import { parseChainId, SUPPORTED_NETWORKS, truncateAddress } from '../../utils/utils';
+import { createPublicClientInstance, checkRPCConnection } from '../../config/client';
 
 const Header: React.FC = () => {
   const { login, authenticated } = usePrivy();
@@ -61,7 +61,7 @@ const Header: React.FC = () => {
 
       // Check RPC connection only if we're on a supported network
       const isSupported = SUPPORTED_NETWORKS.some((network) => network.id === numericChainId);
-      
+
       if (isSupported) {
         setNetworkState((prev) => ({
           ...prev,
@@ -95,16 +95,16 @@ const Header: React.FC = () => {
 
     try {
       // Set switching state immediately
-      setNetworkState((prev) => ({ 
-        ...prev, 
+      setNetworkState((prev) => ({
+        ...prev,
         isNetworkSwitching: true,
         // Update the current network immediately for UI feedback
-        currentNetwork: chainId
+        currentNetwork: chainId,
       }));
 
       // Call the switchChain method
       await currentWallet.switchChain(chainId);
-      
+
       // Immediately check RPC connection after switch
       const publicClient = createPublicClientInstance();
       const isConnected = await checkRPCConnection(publicClient);
@@ -120,18 +120,18 @@ const Header: React.FC = () => {
       setMobileMenuOpen(false);
     } catch (error) {
       console.error('Error switching network:', error);
-      
+
       // Revert to previous network state on error
       checkNetwork();
-      
+
       // Show a brief alert about the failure
       if (window.innerWidth < 640) {
         alert(`Network switch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      setNetworkState((prev) => ({ 
-        ...prev, 
-        isNetworkSwitching: false 
+
+      setNetworkState((prev) => ({
+        ...prev,
+        isNetworkSwitching: false,
       }));
     }
   };
@@ -166,7 +166,7 @@ const Header: React.FC = () => {
   // Refresh user data when wallet changes
   useEffect(() => {
     if (authenticated && currentAddress) {
-      refreshUser().catch(error => console.error('Error refreshing user data:', error));
+      refreshUser().catch((error) => console.error('Error refreshing user data:', error));
     }
   }, [authenticated, currentAddress, refreshUser]);
 
