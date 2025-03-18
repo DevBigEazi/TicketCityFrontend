@@ -8,11 +8,14 @@ import {
   ChevronDown,
   CalendarCheck,
   Building2,
+  Copy,
+  CheckCircle2,
 } from 'lucide-react';
-import { useUser } from '@privy-io/react-auth';
+import { useUser, usePrivy, useWallets } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { maskEmail, permanentUserIdentity, truncateAddress } from '../../utils/utils';
 import { images } from '../../constant';
+import { useNetwork } from '../../contexts/NetworkContext';
 
 const navLinks = [
   { icon: <LayoutDashboard />, label: 'Dashboard', path: '/dashboard' },
@@ -20,44 +23,78 @@ const navLinks = [
   { icon: <PlusCircle />, label: 'Create Event', path: '/create-event' },
   { icon: <CalendarCheck />, label: 'My Events', path: '/my-events' },
   { icon: <Wallet />, label: 'My Wallet', path: '/my-wallet' },
-  //   { icon: <Shield />, label: 'Ticket Verification', path: '/verify' },
   { icon: <Building2 />, label: 'Hub', path: '/organizers' },
   { icon: <Settings />, label: 'Settings', path: '/settings' },
 ];
 
 interface SidebarProps {
-  onNavigate: (path: string) => void;
-  currentPath: string;
+  onNavigate?: (path: string) => void;
+  currentPath?: string;
 }
 
 const Sidebar: React.FC<SidebarProps> = () => {
   const { user } = useUser();
+  const { authenticated } = usePrivy();
+  const { wallets } = useWallets();
   const navigate = useNavigate();
   const location = useLocation();
   const [activePath, setActivePath] = useState(location.pathname);
+  const [walletExpanded, setWalletExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // network information from context
+  const { currentWalletAddress, tokenBalance, networkName, isConnected, refreshData } =
+    useNetwork();
 
   // Update activePath when location changes
   useEffect(() => {
     setActivePath(location.pathname);
   }, [location.pathname]);
 
+  // Listen for wallet changes
+  useEffect(() => {
+    // This will ensure sidebar updates when wallets change
+    if (authenticated && wallets) {
+      refreshData();
+    }
+  }, [authenticated, wallets, refreshData]);
+
+  // Get user information
   const externalWallet = user?.wallet?.address?.toString() || '';
   const userEmail = user?.email?.toString() || '';
   const userNameFromGoogle = user?.google?.name?.toString() || '';
 
-  // Only mask email if it exists
+  // Determine what name to display
   const userEmailMasked = userEmail ? maskEmail(userEmail) : '';
 
-  // if any user information exists before trying to display it
+  // If the currentWalletAddress from the network context is available, prioritize it
+  // This ensures we're showing the currently active wallet address from connected Connector
   const displayName =
     userNameFromGoogle ||
-    (externalWallet ? truncateAddress(externalWallet) : '') ||
+    (currentWalletAddress
+      ? truncateAddress(currentWalletAddress)
+      : externalWallet
+      ? truncateAddress(externalWallet)
+      : '') ||
     userEmailMasked ||
     'No User';
 
   const handleNavigation = (path: string) => {
     setActivePath(path);
     navigate(path);
+  };
+
+  // Handle copy address functionality
+  const copyAddressToClipboard = () => {
+    if (currentWalletAddress) {
+      navigator.clipboard.writeText(currentWalletAddress);
+      setCopied(true);
+
+      // Reset copied state after 3 seconds
+      setTimeout(() => {
+        setCopied(false);
+      }, 3000);
+    }
   };
 
   return (
@@ -74,18 +111,77 @@ const Sidebar: React.FC<SidebarProps> = () => {
         />
       </div>
 
-      {/* User Profile */}
-      <div className="px-6 py-4 flex items-center gap-2 border-b border-borderStroke">
-        <img
-          src={permanentUserIdentity}
-          alt="TicketCity"
-          className="h-10 w-10 rounded-full"
-          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-            e.currentTarget.src = '/placeholder-logo.svg';
-          }}
-        />
-        <span className="text-white font-inter text-sm flex-1">{displayName}</span>
-        <ChevronDown className="w-4 h-4 text-textGray" />
+      {/* User Profile with Wallet Info */}
+      <div className="px-6 py-4 border-b border-borderStroke">
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => setWalletExpanded(!walletExpanded)}
+        >
+          <img
+            src={permanentUserIdentity}
+            alt="User"
+            className="h-10 w-10 rounded-full"
+            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+              e.currentTarget.src = '/placeholder-logo.svg';
+            }}
+          />
+          <span className="text-white font-inter text-sm flex-1">{displayName}</span>
+          <ChevronDown
+            className={`w-4 h-4 text-textGray transition-transform ${
+              walletExpanded ? 'rotate-180' : ''
+            }`}
+          />
+        </div>
+
+        {/* Expandable Wallet Information */}
+        {walletExpanded && authenticated && (
+          <div className="mt-3 pt-3 border-t border-borderStroke/50 space-y-3">
+            {/* Address with copy button */}
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col">
+                <span className="text-textGray text-xs">Address</span>
+                <span className="text-white text-sm font-mono">
+                  {currentWalletAddress ? truncateAddress(currentWalletAddress) : 'Not connected'}
+                </span>
+              </div>
+              <button
+                onClick={copyAddressToClipboard}
+                className="p-1 text-textGray hover:text-white transition-colors"
+                aria-label="Copy address to clipboard"
+                disabled={!currentWalletAddress}
+              >
+                {copied ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+
+            {/* Network */}
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col">
+                <span className="text-textGray text-xs">Network</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-white text-sm">{networkName || 'Unknown'}</span>
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      isConnected ? 'bg-green-400' : 'bg-red-400'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Balance */}
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col">
+                <span className="text-textGray text-xs">Balance</span>
+                <span className="text-white text-sm">{tokenBalance || '0.0000'} ETH</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Navigation Links */}
