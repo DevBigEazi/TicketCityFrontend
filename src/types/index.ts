@@ -7,6 +7,17 @@ export interface NavLink {
   path: string;
 }
 
+// interface for persisted ticket data
+export interface PersistedTicketData {
+  eventId: number;
+  userAddress: string;
+  ticketType: string;
+  ticketPrice: string;
+  purchaseDate: string;
+  transactionHash: string;
+  lastUpdated: string;
+}
+
 export type ViewMode = 'grid' | 'list';
 
 export type EventFilter =

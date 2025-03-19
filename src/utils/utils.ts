@@ -32,55 +32,112 @@ export const parseChainId = (chainId: string | number | undefined): number | nul
   }
 };
 
-export const formatContractError = (error: any) => {
+/**
+ * @param error - Any error object from contract interaction
+ * @returns Formatted error message string
+ */
+export const formatContractError = (error: unknown): string => {
+  // Log the error for debugging purposes
   console.error('Contract interaction error:', error);
 
-  // Check for common wallet errors
-  if (error?.message?.includes('user rejected transaction')) {
-    return 'Transaction was rejected in your wallet. Please try again.';
-  }
+  // Initialize default error message
+  let errorMessage = 'Unknown contract interaction error. Please try again.';
 
-  if (error?.message?.includes('insufficient funds')) {
-    return 'Insufficient funds in your wallet to complete this transaction.';
-  }
+  // Type guard to check if error has message property
+  // This handles both Error objects and custom error objects
+  if (error && typeof error === 'object') {
+    const errorObj = error as Record<string, any>;
 
-  // Network related errors
-  if (error?.message?.includes('network') || error?.message?.includes('chain')) {
-    return 'Network connection issue. Please check you are on the correct network.';
-  }
+    // Check for error message
+    if (errorObj.message && typeof errorObj.message === 'string') {
+      // Check for common wallet errors
+      if (errorObj.message.includes('user rejected')) {
+        return 'Transaction was rejected in your wallet. Please try again.';
+      }
 
-  // Gas related errors
-  if (error?.message?.includes('gas')) {
-    return 'Transaction failed due to gas estimation. Try increasing gas limit.';
-  }
+      if (errorObj.message.includes('insufficient funds')) {
+        return 'Insufficient funds in your wallet to complete this transaction.';
+      }
 
-  // Smart contract specific errors (often in the data property)
-  if (error?.data) {
-    return `Smart contract error: ${error.data.message || JSON.stringify(error.data)}`;
-  }
+      // Network related errors
+      if (
+        errorObj.message.includes('network') ||
+        errorObj.message.includes('chain') ||
+        errorObj.message.includes('disconnected')
+      ) {
+        return 'Network connection issue. Please check you are on the correct network.';
+      }
 
-  // RPC errors often have code property
-  if (error?.code) {
-    // Common RPC error codes
-    switch (error.code) {
-      case 4001:
-        return 'Transaction rejected by user.';
-      case -32603:
-        return 'Internal JSON-RPC error. Please try again later.';
-      case -32002:
-        return 'Request already pending in your wallet. Please check your wallet.';
-      default:
-        return `RPC error (${error.code}): ${error.message || 'Unknown error'}`;
+      // Gas related errors
+      if (errorObj.message.includes('gas')) {
+        return 'Transaction failed due to gas estimation. Try increasing gas limit.';
+      }
+
+      // Timeouts
+      if (errorObj.message.includes('timeout') || errorObj.message.includes('timed out')) {
+        return 'Transaction submission timed out. It may still complete - please check your wallet before trying again.';
+      }
+
+      // Set the error message to the actual message if we haven't matched specific patterns
+      errorMessage = errorObj.message;
+    }
+
+    // Smart contract specific errors (often in the data property)
+    if (errorObj.data) {
+      try {
+        // Handle case where data contains a message property
+        if (errorObj.data.message && typeof errorObj.data.message === 'string') {
+          return `Smart contract error: ${errorObj.data.message}`;
+        }
+
+        // Handle case where data is an object that needs to be stringified
+        if (typeof errorObj.data === 'object') {
+          return `Smart contract error: ${JSON.stringify(errorObj.data)}`;
+        }
+
+        // Handle case where data is a primitive value
+        return `Smart contract error: ${String(errorObj.data)}`;
+      } catch (stringifyError) {
+        return 'Smart contract returned an error that could not be processed.';
+      }
+    }
+
+    // RPC errors often have code property
+    if ('code' in errorObj && typeof errorObj.code === 'number') {
+      // Common RPC error codes
+      switch (errorObj.code) {
+        case 4001:
+          return 'Transaction rejected by user.';
+        case -32603:
+          return 'Internal JSON-RPC error. Please try again later.';
+        case -32002:
+          return 'Request already pending in your wallet. Please check your wallet.';
+        case -32000:
+          return 'Transaction execution reverted. The contract rejected the transaction.';
+        case -32001:
+          return 'Resource not found. Please check network configuration.';
+        case -32004:
+          return 'Method not supported. Please check contract compatibility.';
+        case -32005:
+          return 'Request limit exceeded. Please try again later.';
+        default:
+          return `RPC error (${errorObj.code}): ${errorObj.message || 'Unknown error'}`;
+      }
     }
   }
 
-  // Timeouts
-  if (error?.message?.includes('timeout') || error?.message?.includes('timed out')) {
-    return 'Transaction submission timed out. It may still complete - please check your wallet before trying again.';
+  // For Error instances we might have missed
+  if (error instanceof Error) {
+    return error.message;
   }
 
-  // Any other errors
-  return error?.message || 'Unknown contract interaction error. Please try again.';
+  // Handle primitive error types
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  // Return the default error message if no specific error pattern was matched
+  return errorMessage;
 };
 
 // Helper function to convert string/bigint to formatted string
