@@ -6,7 +6,7 @@ interface EventData {
   title: string;
   date: string;
   time: string;
-  location: string; 
+  location: string;
   description: string;
   capacity: string;
   image: string;
@@ -43,10 +43,7 @@ const PublishedEvents: React.FC = () => {
 
   return (
     <div className="">
-      <PublishedEventsComponent 
-        eventData={eventData}
-        onBack={() => navigate('/explore')}
-      />
+      <PublishedEventsComponent eventData={eventData} onBack={() => navigate('/explore')} />
     </div>
   );
 };
