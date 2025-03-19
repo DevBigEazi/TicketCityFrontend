@@ -5,7 +5,7 @@ import TICKET_CITY_ABI from '../../abi/abi.json';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { safeContractRead } from '../../config/client';
 import { encodeFunctionData } from 'viem';
-import { formatDate, truncateAddress } from '../../utils/utils';
+import { formatDate, truncateAddress, formatContractError } from '../../utils/utils';
 import {
   EventDataStructure,
   EventObjects,
@@ -34,6 +34,9 @@ const Dashboard = () => {
     message: string;
   }>({ eventId: null, status: '', message: '' });
 
+  // New error state for showing fetch errors
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   // Ref to track the current wallet address to detect changes
   const currentWalletAddressRef = useRef<string>('');
 
@@ -55,7 +58,7 @@ const Dashboard = () => {
     contractEvents,
   } = useNetwork();
 
-  // Main data fetching function
+  // Main data fetching function with improved error handling
   const fetchUserData = useCallback(async () => {
     if (!currentWalletAddress) {
       setLoading(false);
@@ -63,6 +66,7 @@ const Dashboard = () => {
     }
 
     setLoading(true);
+    setFetchError(null); // Reset error state before fetching
 
     try {
       const publicClient = getPublicClient();
@@ -71,212 +75,245 @@ const Dashboard = () => {
       // Check if RPC is responsive
       const isRpcConnected = await checkRPCStatus();
       if (!isRpcConnected) {
+        setFetchError(
+          'Network connection is unavailable. Please check your connection and try again.',
+        );
         setLoading(false);
         return;
       }
 
       // Get all events the user has registered for
-      const registeredEventIds = (await safeContractRead(
-        publicClient,
-        {
-          address: contractAddress,
-          abi: TICKET_CITY_ABI,
-          functionName: 'allEventsRegisteredForByAUser',
-          args: [currentWalletAddress],
-        },
-        isTestnet,
-      )) as bigint[];
-
-      if (!registeredEventIds || registeredEventIds.length === 0) {
-        setEvents([]);
-        setTicketStats({ total: 0, checkedIn: 0, pending: 0 });
-        setLoading(false);
-        return;
-      }
-
-      // Check verification status for each registered event
-      const ticketsMap: TicketsMap = {};
-      const verifiedMap: Record<string, boolean> = {};
-
-      // Batch check verification status for each event
-      await Promise.all(
-        registeredEventIds.map(async (eventId) => {
-          try {
-            const eventIdStr = eventId.toString();
-
-            // Check verification status
-            try {
-              const isVerified = await safeContractRead(
-                publicClient,
-                {
-                  address: contractAddress,
-                  abi: TICKET_CITY_ABI,
-                  functionName: 'isVerified',
-                  args: [currentWalletAddress, eventId],
-                },
-                isTestnet,
-              );
-              verifiedMap[eventIdStr] = Boolean(isVerified);
-            } catch (error) {
-              verifiedMap[eventIdStr] = false;
-            }
-          } catch (error) {}
-        }),
-      );
-
-      // Get ticket types for the registered events
       try {
-        const ticketDetails = (await safeContractRead(
+        const registeredEventIds = (await safeContractRead(
           publicClient,
           {
             address: contractAddress,
             abi: TICKET_CITY_ABI,
-            functionName: 'getMyTickets',
-            args: [],
+            functionName: 'allEventsRegisteredForByAUser',
+            args: [currentWalletAddress],
           },
           isTestnet,
-        )) as TicketDetails;
+        )) as bigint[];
 
-        if (
-          ticketDetails &&
-          ticketDetails.eventIds &&
-          Array.isArray(ticketDetails.eventIds) &&
-          ticketDetails.ticketTypes &&
-          Array.isArray(ticketDetails.ticketTypes)
-        ) {
-          ticketDetails.eventIds.forEach((eventId, index) => {
-            const eventIdStr = eventId.toString();
-            if (index < ticketDetails.ticketTypes.length) {
-              ticketsMap[eventIdStr] = ticketDetails.ticketTypes[index];
-            }
-          });
+        if (!registeredEventIds || registeredEventIds.length === 0) {
+          setEvents([]);
+          setTicketStats({ total: 0, checkedIn: 0, pending: 0 });
+          setLoading(false);
+          return;
         }
-      } catch (error) {}
 
-      setUserTickets(ticketsMap);
+        // Check verification status for each registered event
+        const ticketsMap: TicketsMap = {};
+        const verifiedMap: Record<string, boolean> = {};
 
-      // Fetch details for each registered event
-      const eventsData = await Promise.all(
-        registeredEventIds.map(async (eventId): Promise<EventObjects | null> => {
-          try {
-            const eventIdStr = eventId.toString();
-            const eventData = (await safeContractRead(
-              publicClient,
-              {
-                address: contractAddress,
-                abi: TICKET_CITY_ABI,
-                functionName: 'getEvent',
-                args: [eventId],
-              },
-              isTestnet,
-            )) as EventDataStructure;
-
-            // Classify event status based on current time
-            const now = Date.now();
-            const startTimestamp = Number(eventData.startDate) * 1000;
-            const endTimestamp = Number(eventData.endDate) * 1000;
-
-            // Make sure we properly classify events
-            const hasEnded = endTimestamp < now;
-            const hasNotStarted = startTimestamp > now;
-            const isLive = !hasEnded && !hasNotStarted;
-
-            // Get ticket price details
-            let regularPrice = 0;
-            let vipPrice = 0;
-            let ticketType = ticketsMap[eventIdStr] || 'Regular';
-            let hasRegularTicket = false;
-            let hasVIPTicket = false;
-
+        // Batch check verification status for each event with error handling
+        await Promise.all(
+          registeredEventIds.map(async (eventId) => {
             try {
-              const eventTickets = (await safeContractRead(
+              const eventIdStr = eventId.toString();
+
+              // Check verification status
+              try {
+                const isVerified = await safeContractRead(
+                  publicClient,
+                  {
+                    address: contractAddress,
+                    abi: TICKET_CITY_ABI,
+                    functionName: 'isVerified',
+                    args: [currentWalletAddress, eventId],
+                  },
+                  isTestnet,
+                );
+                verifiedMap[eventIdStr] = Boolean(isVerified);
+              } catch (error) {
+                console.error(
+                  `Failed to check verification status for event ${eventIdStr}:`,
+                  error,
+                );
+                verifiedMap[eventIdStr] = false;
+              }
+            } catch (error) {
+              // Handle individual event verification error
+              console.error('Error processing event verification:', formatContractError(error));
+            }
+          }),
+        );
+
+        // Get ticket types for the registered events with error handling
+        try {
+          const ticketDetails = (await safeContractRead(
+            publicClient,
+            {
+              address: contractAddress,
+              abi: TICKET_CITY_ABI,
+              functionName: 'getMyTickets',
+              args: [],
+            },
+            isTestnet,
+          )) as TicketDetails;
+
+          if (
+            ticketDetails &&
+            ticketDetails.eventIds &&
+            Array.isArray(ticketDetails.eventIds) &&
+            ticketDetails.ticketTypes &&
+            Array.isArray(ticketDetails.ticketTypes)
+          ) {
+            ticketDetails.eventIds.forEach((eventId, index) => {
+              const eventIdStr = eventId.toString();
+              if (index < ticketDetails.ticketTypes.length) {
+                ticketsMap[eventIdStr] = ticketDetails.ticketTypes[index];
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Failed to fetch ticket details:', formatContractError(error));
+        }
+
+        setUserTickets(ticketsMap);
+
+        // Fetch details for each registered event with improved error handling
+        const eventsData = await Promise.all(
+          registeredEventIds.map(async (eventId): Promise<EventObjects | null> => {
+            try {
+              const eventIdStr = eventId.toString();
+              const eventData = (await safeContractRead(
                 publicClient,
                 {
                   address: contractAddress,
                   abi: TICKET_CITY_ABI,
-                  functionName: 'eventTickets',
+                  functionName: 'getEvent',
                   args: [eventId],
                 },
                 isTestnet,
-              )) as EventTickets;
+              )) as EventDataStructure;
 
-              if (eventTickets) {
-                regularPrice = eventTickets.regularTicketFee
-                  ? Number(eventTickets.regularTicketFee) / 1e18
-                  : 0;
-                vipPrice = eventTickets.vipTicketFee ? Number(eventTickets.vipTicketFee) / 1e18 : 0;
+              // Classify event status based on current time
+              const now = Date.now();
+              const startTimestamp = Number(eventData.startDate) * 1000;
+              const endTimestamp = Number(eventData.endDate) * 1000;
 
-                // Determine if ticket types are available
-                hasRegularTicket = regularPrice > 0;
-                hasVIPTicket = vipPrice > 0;
+              // Make sure we properly classify events
+              const hasEnded = endTimestamp < now;
+              const hasNotStarted = startTimestamp > now;
+              const isLive = !hasEnded && !hasNotStarted;
+
+              // Get ticket price details with error handling
+              let regularPrice = 0;
+              let vipPrice = 0;
+              let ticketType = ticketsMap[eventIdStr] || 'Regular';
+              let hasRegularTicket = false;
+              let hasVIPTicket = false;
+
+              try {
+                const eventTickets = (await safeContractRead(
+                  publicClient,
+                  {
+                    address: contractAddress,
+                    abi: TICKET_CITY_ABI,
+                    functionName: 'eventTickets',
+                    args: [eventId],
+                  },
+                  isTestnet,
+                )) as EventTickets;
+
+                if (eventTickets) {
+                  regularPrice = eventTickets.regularTicketFee
+                    ? Number(eventTickets.regularTicketFee) / 1e18
+                    : 0;
+                  vipPrice = eventTickets.vipTicketFee
+                    ? Number(eventTickets.vipTicketFee) / 1e18
+                    : 0;
+
+                  // Determine if ticket types are available
+                  hasRegularTicket = regularPrice > 0;
+                  hasVIPTicket = vipPrice > 0;
+                }
+              } catch (error) {
+                console.error(
+                  `Failed to fetch ticket prices for event ${eventIdStr}:`,
+                  formatContractError(error),
+                );
               }
-            } catch (error) {}
 
-            // Process the image URL
-            let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
+              // Process the image URL
+              let imageUrl = eventData.imageUri || '/placeholder-event.jpg';
 
-            // Calculate remaining tickets
-            const remainingTickets =
-              Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
+              // Calculate remaining tickets
+              const remainingTickets =
+                Number(eventData.expectedAttendees) - Number(eventData.userRegCount);
 
-            // Create an event object with all required properties
-            return {
-              id: eventIdStr,
-              type: Number(eventData.ticketType) === 0 ? 'Free' : ticketType,
-              title: eventData.title || 'Untitled Event',
-              description: eventData.desc || 'No description available',
-              location: eventData.location || 'TBD',
-              date: formatDate(eventData.startDate),
-              endDate: formatDate(eventData.endDate),
-              price: {
-                regular: regularPrice,
-                vip: vipPrice,
-              },
-              image: imageUrl,
-              organiser: eventData.organiser,
-              attendees: {
-                registered: Number(eventData.userRegCount),
-                expected: Number(eventData.expectedAttendees),
-                verified: Number(eventData.verifiedAttendeesCount),
-              },
-              hasEnded,
-              hasNotStarted,
-              isLive,
-              isVerified: verifiedMap[eventIdStr] || false,
-              hasTicket: true,
-              ticketType: ticketType,
-              startTimestamp,
-              endTimestamp,
-              rawData: eventData,
-              remainingTickets,
-              hasTicketCreated: true,
-              hasRegularTicket,
-              hasVIPTicket,
-              coordinates: null,
-              distance: null,
-            };
-          } catch (error) {
-            return null;
-          }
-        }),
-      );
+              // Create an event object with all required properties
+              return {
+                id: eventIdStr,
+                type: Number(eventData.ticketType) === 0 ? 'Free' : ticketType,
+                title: eventData.title || 'Untitled Event',
+                description: eventData.desc || 'No description available',
+                location: eventData.location || 'TBD',
+                date: formatDate(eventData.startDate),
+                endDate: formatDate(eventData.endDate),
+                price: {
+                  regular: regularPrice,
+                  vip: vipPrice,
+                },
+                image: imageUrl,
+                organiser: eventData.organiser,
+                attendees: {
+                  registered: Number(eventData.userRegCount),
+                  expected: Number(eventData.expectedAttendees),
+                  verified: Number(eventData.verifiedAttendeesCount),
+                },
+                hasEnded,
+                hasNotStarted,
+                isLive,
+                isVerified: verifiedMap[eventIdStr] || false,
+                hasTicket: true,
+                ticketType: ticketType,
+                startTimestamp,
+                endTimestamp,
+                rawData: eventData,
+                remainingTickets,
+                hasTicketCreated: true,
+                hasRegularTicket,
+                hasVIPTicket,
+                coordinates: null,
+                distance: null,
+              };
+            } catch (error) {
+              console.error(
+                `Failed to fetch details for event ${eventId}:`,
+                formatContractError(error),
+              );
+              return null;
+            }
+          }),
+        );
 
-      // Filter out null responses with a type predicate
-      const formattedEvents: EventObjects[] = eventsData.filter(
-        (event): event is EventObjects => event !== null,
-      );
+        // Filter out null responses with a type predicate
+        const formattedEvents: EventObjects[] = eventsData.filter(
+          (event): event is EventObjects => event !== null,
+        );
 
-      // Update ticket stats
-      const checkedIn = formattedEvents.filter((event) => event.isVerified).length;
-      setTicketStats({
-        total: formattedEvents.length,
-        checkedIn,
-        pending: formattedEvents.length - checkedIn,
-      });
+        // Update ticket stats
+        const checkedIn = formattedEvents.filter((event) => event.isVerified).length;
+        setTicketStats({
+          total: formattedEvents.length,
+          checkedIn,
+          pending: formattedEvents.length - checkedIn,
+        });
 
-      // Store all events in one array but with status flags
-      setEvents(formattedEvents);
+        // Store all events in one array but with status flags
+        setEvents(formattedEvents);
+      } catch (error) {
+        // Handle the main error for fetching registered events
+        const errorMessage = formatContractError(error);
+        console.error('Failed to fetch registered events:', errorMessage);
+        setFetchError(`Failed to load your events: ${errorMessage}`);
+      }
     } catch (error) {
+      const errorMessage = formatContractError(error);
+      console.error('Dashboard data fetch error:', errorMessage);
+      setFetchError(`An error occurred: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -297,6 +334,7 @@ const Dashboard = () => {
           setEvents([]);
           setUserTickets({});
           setTicketStats({ total: 0, checkedIn: 0, pending: 0 });
+          setFetchError(null);
 
           // Fetch data for the new wallet
           fetchUserData();
@@ -335,17 +373,21 @@ const Dashboard = () => {
     }
   }, [authenticated, currentWalletAddress, chainId, isTestnet, fetchUserData]);
 
-  // Function to wait for a transaction receipt
+  // Function to wait for a transaction receipt with improved error handling
   const waitForReceipt = async (provider: any, txHash: string) => {
     let receipt = null;
     let retries = 0;
     const maxRetries = 10;
 
     while (!receipt && retries < maxRetries) {
-      receipt = await provider.request({
-        method: 'eth_getTransactionReceipt',
-        params: [txHash],
-      });
+      try {
+        receipt = await provider.request({
+          method: 'eth_getTransactionReceipt',
+          params: [txHash],
+        });
+      } catch (error) {
+        console.error('Error getting transaction receipt:', formatContractError(error));
+      }
 
       if (!receipt) {
         retries++;
@@ -360,14 +402,49 @@ const Dashboard = () => {
     return receipt;
   };
 
-  // Handle check-in process with network awareness
+  // Handle check-in process with network awareness and improved error handling
   const handleCheckIn = async (eventId: string) => {
-    if (!wallets?.[0] || checkingIn || !currentWalletAddress) return;
+    if (!wallets?.[0] || checkingIn || !currentWalletAddress) {
+      if (!wallets?.[0]) {
+        setCheckInStatus({
+          eventId: eventId,
+          status: 'error',
+          message: 'Wallet not connected. Please connect your wallet first.',
+        });
+      } else if (checkingIn) {
+        setCheckInStatus({
+          eventId: eventId,
+          status: 'error',
+          message: 'Another check-in is in progress. Please wait.',
+        });
+      } else if (!currentWalletAddress) {
+        setCheckInStatus({
+          eventId: eventId,
+          status: 'error',
+          message: 'Wallet address not found. Please reconnect your wallet.',
+        });
+      }
+
+      setTimeout(() => {
+        setCheckInStatus({ eventId: null, status: '', message: '' });
+      }, 3000);
+
+      return;
+    }
 
     // Check RPC connection before attempting transaction
     const isRpcConnected = await checkRPCStatus();
     if (!isRpcConnected) {
-      alert('Network connection is unavailable. Please check your connection and try again.');
+      setCheckInStatus({
+        eventId: eventId,
+        status: 'error',
+        message: 'Network connection is unavailable. Please check your connection and try again.',
+      });
+
+      setTimeout(() => {
+        setCheckInStatus({ eventId: null, status: '', message: '' });
+      }, 3000);
+
       return;
     }
 
@@ -390,59 +467,70 @@ const Dashboard = () => {
         args: [BigInt(eventId)],
       });
 
-      const eventTxHash = await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: currentWalletAddress, to: contractAddress, data: verifyAttendanceData }],
-      });
-
-      // Wait for transaction receipt
-      await waitForReceipt(provider, eventTxHash);
-
-      setCheckInStatus({
-        eventId: eventId,
-        status: 'processing',
-        message: 'Transaction submitted. Waiting for confirmation...',
-      });
-
-      // Wait for the transaction to be confirmed
-      const publicClient = getPublicClient();
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash: eventTxHash as `0x${string}`,
-      });
-
-      if (receipt.status === 'success') {
-        setCheckInStatus({
-          eventId: eventId,
-          status: 'success',
-          message: 'Successfully checked in!',
+      try {
+        const eventTxHash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [{ from: currentWalletAddress, to: contractAddress, data: verifyAttendanceData }],
         });
 
-        // Update the events array to mark this event as verified
-        setEvents((prevEvents) =>
-          prevEvents.map((event) =>
-            event.id === eventId ? { ...event, isVerified: true } : event,
-          ),
-        );
+        // Wait for transaction receipt
+        await waitForReceipt(provider, eventTxHash);
 
-        // Update ticket stats
-        setTicketStats((prev) => ({
-          ...prev,
-          checkedIn: prev.checkedIn + 1,
-          pending: prev.pending - 1,
-        }));
+        setCheckInStatus({
+          eventId: eventId,
+          status: 'processing',
+          message: 'Transaction submitted. Waiting for confirmation...',
+        });
 
-        // Clear status after a delay
-        setTimeout(() => {
-          setCheckInStatus({ eventId: null, status: '', message: '' });
-        }, 3000);
-      } else {
-        throw new Error('Transaction failed');
+        // Wait for the transaction to be confirmed
+        try {
+          const publicClient = getPublicClient();
+          const receipt = await publicClient.waitForTransactionReceipt({
+            hash: eventTxHash as `0x${string}`,
+          });
+
+          if (receipt.status === 'success') {
+            setCheckInStatus({
+              eventId: eventId,
+              status: 'success',
+              message: 'Successfully checked in!',
+            });
+
+            // Update the events array to mark this event as verified
+            setEvents((prevEvents) =>
+              prevEvents.map((event) =>
+                event.id === eventId ? { ...event, isVerified: true } : event,
+              ),
+            );
+
+            // Update ticket stats
+            setTicketStats((prev) => ({
+              ...prev,
+              checkedIn: prev.checkedIn + 1,
+              pending: prev.pending - 1,
+            }));
+
+            // Clear status after a delay
+            setTimeout(() => {
+              setCheckInStatus({ eventId: null, status: '', message: '' });
+            }, 3000);
+          } else {
+            throw new Error('Transaction failed on the blockchain');
+          }
+        } catch (confirmError) {
+          throw new Error(formatContractError(confirmError) || 'Failed to confirm transaction');
+        }
+      } catch (txError) {
+        throw new Error(formatContractError(txError) || 'Transaction creation failed');
       }
     } catch (error: any) {
+      const errorMessage =
+        formatContractError(error) || error.message || 'Failed to check in. Please try again.';
+
       setCheckInStatus({
         eventId: eventId,
         status: 'error',
-        message: error.message || 'Failed to check in. Please try again.',
+        message: errorMessage,
       });
 
       // Clear error status after a delay
@@ -476,8 +564,25 @@ const Dashboard = () => {
         await navigator.clipboard.writeText(currentWalletAddress);
         setCopyStatus(true);
         setTimeout(() => setCopyStatus(false), 2000);
-      } catch (err) {}
+      } catch (err) {
+        console.error('Failed to copy address:', err);
+        // Show error message
+        setCheckInStatus({
+          eventId: null,
+          status: 'error',
+          message: 'Failed to copy address to clipboard',
+        });
+        setTimeout(() => {
+          setCheckInStatus({ eventId: null, status: '', message: '' });
+        }, 2000);
+      }
     }
+  };
+
+  // Handle refresh data
+  const handleRefreshData = () => {
+    setFetchError(null);
+    fetchUserData();
   };
 
   // If not authenticated, show connect wallet UI
@@ -510,7 +615,22 @@ const Dashboard = () => {
 
   // Check-in status notification
   const renderCheckInNotification = () => {
-    if (!checkInStatus.eventId || !checkInStatus.status) return null;
+    if (!checkInStatus.eventId && !checkInStatus.status && !fetchError) return null;
+
+    // If there's a fetch error, show that instead
+    if (fetchError && !checkInStatus.status) {
+      return (
+        <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg max-w-xs z-50">
+          <p>{fetchError}</p>
+          <button
+            onClick={handleRefreshData}
+            className="mt-2 bg-white text-red-500 px-2 py-1 rounded text-sm font-bold"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
 
     const getBgColor = () => {
       switch (checkInStatus.status) {
@@ -554,6 +674,13 @@ const Dashboard = () => {
             </p>
           )}
         </div>
+        <button
+          onClick={handleRefreshData}
+          className="bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded text-sm"
+          disabled={loading}
+        >
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       {/* Wallet and Ticket Overview Section */}
@@ -614,6 +741,19 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Display fetch error message if it exists */}
+      {fetchError && (
+        <div className="mb-8 bg-red-500 bg-opacity-20 text-red-300 p-4 rounded-xl shadow-button-inset border border-red-400 backdrop-blur-sm">
+          <p className="font-medium">{fetchError}</p>
+          <button
+            onClick={handleRefreshData}
+            className="mt-2 bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Upcoming Events Section */}
       <div className="mb-8">
