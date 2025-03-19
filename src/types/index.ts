@@ -156,7 +156,7 @@ export interface EventCardProps {
   isDashboard?: boolean; // Flag to determine if we're in dashboard or listing view
   isVerified?: boolean; // Flag to determine if the ticket is verified
   onCheckIn?: (eventId: string) => void; // Optional check-in callback
-  locationInfo?: string; // Add this property for location display
+  locationInfo?: string;
 }
 
 // Props types for components
