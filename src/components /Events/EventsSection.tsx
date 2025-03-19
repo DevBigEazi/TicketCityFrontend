@@ -77,10 +77,12 @@ const EventsSection: React.FC = () => {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
+        const newUserLocation = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-        });
+        };
+
+        setUserLocation(newUserLocation);
         setLocationStatus('success');
         localStorage.setItem(
           'userLocation',
@@ -94,8 +96,8 @@ const EventsSection: React.FC = () => {
         // Set sort by distance when location is obtained, but don't change the filter
         setSortBy('Distance');
 
-        // Refresh events to apply the new sorting
-        fetchEvents(false);
+        // Refresh events with the new location data
+        fetchEvents(false, newUserLocation);
       },
       (error) => {
         console.error('Error getting location:', error);
@@ -113,11 +115,16 @@ const EventsSection: React.FC = () => {
             const parsedLocation = JSON.parse(cachedLocation);
             // Only use cached location if it's less than 24 hours old
             if (Date.now() - parsedLocation.timestamp < 24 * 60 * 60 * 1000) {
-              setUserLocation({
+              const newUserLocation = {
                 lat: parsedLocation.lat,
                 lng: parsedLocation.lng,
-              });
+              };
+
+              setUserLocation(newUserLocation);
               setLocationStatus('success');
+
+              // Refresh events with the cached location data
+              fetchEvents(false, newUserLocation);
             }
           } catch (e) {
             console.error('Error parsing cached location:', e);
@@ -130,7 +137,7 @@ const EventsSection: React.FC = () => {
 
   // Fetch events from blockchain
   const fetchEvents = useCallback(
-    async (showLoadingState = true): Promise<void> => {
+    async (showLoadingState = true, currentUserLocation = userLocation): Promise<void> => {
       if (showLoadingState) {
         setLoading(true);
         setErrorMessage('');
@@ -291,20 +298,24 @@ const EventsSection: React.FC = () => {
               const locationStr = eventData.location || 'TBD';
               let coordinates = null;
               try {
+                // Attempt to geocode the location
                 coordinates = await geocodeLocation(locationStr);
+                // Log for debugging
+                console.log(`Geocoded location for event ${eventId}:`, coordinates);
               } catch (error) {
                 console.error(`Error geocoding location for event ${eventId}:`, error);
               }
 
               // Calculate distance if user location is available
               let distance = null;
-              if (userLocation && coordinates) {
+              if (currentUserLocation && coordinates) {
                 distance = calculateDistance(
-                  userLocation.lat,
-                  userLocation.lng,
+                  currentUserLocation.lat,
+                  currentUserLocation.lng,
                   coordinates.lat,
                   coordinates.lng,
                 );
+                console.log(`Distance for event ${eventId}: ${distance}km`);
               }
 
               // Create proper event object with typed rawData
@@ -363,10 +374,6 @@ const EventsSection: React.FC = () => {
         // Update the last updated timestamp
         setLastUpdated(new Date());
 
-        if (userLocation) {
-          setSortBy('Distance');
-        }
-
         // Reset network switched flag if it was set
         if (networkSwitched) {
           setNetworkSwitched(false);
@@ -402,14 +409,19 @@ const EventsSection: React.FC = () => {
 
         // Only use cached location if it's less than 24 hours old
         if (Date.now() - parsedLocation.timestamp < 24 * 60 * 60 * 1000) {
-          setUserLocation({
+          const newUserLocation = {
             lat: parsedLocation.lat,
             lng: parsedLocation.lng,
-          });
+          };
+
+          setUserLocation(newUserLocation);
           setLocationStatus('success');
 
           // Set sort by distance when location is available, but keep the current filter
           setSortBy('Distance');
+
+          // Immediately use this location with events
+          fetchEvents(false, newUserLocation);
         }
       } catch (e) {
         console.error('Error parsing cached location:', e);
@@ -475,49 +487,72 @@ const EventsSection: React.FC = () => {
   }, [chainId, isTestnet, isConnected, fetchEvents, initialLoadComplete, refreshData]);
 
   // Apply filters and sorting to the events
-  const filteredEvents = events.filter((event) => {
-    if (activeFilter === 'All') return true;
-    if (activeFilter === 'Free' && event.type === 'Free') return true;
-    if (activeFilter === 'Paid' && event.type !== 'Free') return true;
-    // check both event type and hasVIPTicket flag
-    if (activeFilter === 'VIP' && (event.type === 'VIP' || event.hasVIPTicket)) return true;
-    if (activeFilter === 'Regular' && event.hasRegularTicket && event.price.regular > 0)
-      return true;
-    if (activeFilter === 'Virtual' && event.location.toLowerCase().includes('virtual')) return true;
-    if (activeFilter === 'In-Person' && !event.location.toLowerCase().includes('virtual'))
-      return true;
-    // New filter for nearby events (within 25km)
-    if (activeFilter === 'Nearby' && typeof event.distance === 'number' && event.distance < 25)
-      return true;
-    return false;
-  });
+  const applyFilters = useCallback(() => {
+    // First filter events
+    const filtered = events.filter((event) => {
+      if (activeFilter === 'All') return true;
+      if (activeFilter === 'Free' && event.type === 'Free') return true;
+      if (activeFilter === 'Paid' && event.type !== 'Free') return true;
+      // check both event type and hasVIPTicket flag
+      if (activeFilter === 'VIP' && (event.type === 'VIP' || event.hasVIPTicket)) return true;
+      if (activeFilter === 'Regular' && event.hasRegularTicket && event.price.regular > 0)
+        return true;
+      if (activeFilter === 'Virtual' && event.location.toLowerCase().includes('virtual'))
+        return true;
+      if (activeFilter === 'In-Person' && !event.location.toLowerCase().includes('virtual'))
+        return true;
+      // Fixed Nearby filter - only include events with valid distance within 25km
+      if (activeFilter === 'Nearby' && typeof event.distance === 'number' && event.distance < 25)
+        return true;
+      return false;
+    });
 
-  // Enhanced sorting with multiple options including distance
-  const sortedEvents = [...filteredEvents].sort((a, b) => {
-    if (sortBy === 'Date') {
-      return (a.startTimestamp || 0) - (b.startTimestamp || 0);
-    } else if (sortBy === 'Popularity') {
-      // Sort by attendance percentage (registered/expected)
-      const aPopularity = a.attendees.registered / (a.attendees.expected || 1);
-      const bPopularity = b.attendees.registered / (b.attendees.expected || 1);
-      return bPopularity - aPopularity; // Higher percentage first
-    } else if (sortBy === 'Ticket Price') {
-      // Compare regular ticket prices (or minimum prices)
-      const aPrice = a.price.regular || 0;
-      const bPrice = b.price.regular || 0;
-      return aPrice - bPrice; // Lower price first
-    } else if (sortBy === 'Distance') {
-      // Sort by distance (virtual events come last)
-      const aDistance = typeof a.distance === 'number' ? a.distance : 99999;
-      const bDistance = typeof b.distance === 'number' ? b.distance : 99999;
-      return aDistance - bDistance; // Closer first
-    }
-    return 0;
-  });
+    // Then sort the filtered events
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'Date') {
+        return (a.startTimestamp || 0) - (b.startTimestamp || 0);
+      } else if (sortBy === 'Popularity') {
+        // Sort by attendance percentage (registered/expected)
+        const aPopularity = a.attendees.registered / (a.attendees.expected || 1);
+        const bPopularity = b.attendees.registered / (b.attendees.expected || 1);
+        return bPopularity - aPopularity; // Higher percentage first
+      } else if (sortBy === 'Ticket Price') {
+        // Compare regular ticket prices (or minimum prices)
+        const aPrice = a.price.regular || 0;
+        const bPrice = b.price.regular || 0;
+        return aPrice - bPrice; // Lower price first
+      } else if (sortBy === 'Distance') {
+        // Improved distance sorting
+        // Handle null distances (put them at the end)
+        if (typeof a.distance !== 'number' && typeof b.distance !== 'number') {
+          return 0; // Both have no distance, maintain original order
+        }
+        if (typeof a.distance !== 'number') {
+          return 1; // a has no distance, put it after b
+        }
+        if (typeof b.distance !== 'number') {
+          return -1; // b has no distance, put it after a
+        }
+        // Normal numeric comparison when both have distances
+        return a.distance - b.distance; // Closer first
+      }
+      return 0;
+    });
+  }, [events, activeFilter, sortBy]);
+
+  // Memoize the filtered and sorted events
+  const sortedEvents = applyFilters();
 
   const totalPages = Math.ceil(sortedEvents.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedEvents = sortedEvents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  // Ensure we're on a valid page if the total pages changes
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
 
   if (loading) {
     return (
@@ -602,6 +637,8 @@ const EventsSection: React.FC = () => {
                 if (filter === 'Nearby' && !userLocation && !geoPermissionDenied) {
                   getUserLocation();
                 }
+                // Reset to page 1 when changing filters
+                setCurrentPage(1);
               }}
               className={`px-4 py-2 rounded-2xl font-inter border border-[#3A3A3A] text-sm
                 ${
@@ -631,6 +668,8 @@ const EventsSection: React.FC = () => {
               if (newSortBy === 'Distance' && !userLocation && !geoPermissionDenied) {
                 getUserLocation();
               }
+              // Reset to page 1 when changing sort
+              setCurrentPage(1);
             }}
             className="bg-searchBg text-white rounded-lg px-4 py-2 font-inter text-sm"
           >
@@ -662,6 +701,7 @@ const EventsSection: React.FC = () => {
           Showing {paginatedEvents.length} of {sortedEvents.length} events
           {activeFilter !== 'All' ? ` (filtered by ${activeFilter})` : ''}
           {sortBy !== 'Date' ? ` (sorted by ${sortBy})` : ''}
+          {sortBy === 'Distance' && userLocation ? ` (from your location)` : ''}
         </div>
       )}
 
