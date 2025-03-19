@@ -11,7 +11,7 @@ import {
   Copy,
   CheckCircle2,
 } from 'lucide-react';
-import { useUser, usePrivy, useWallets, useLogout } from '@privy-io/react-auth';
+import { useUser, usePrivy, useWallets } from '@privy-io/react-auth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { maskEmail, permanentUserIdentity, truncateAddress } from '../../utils/utils';
 import { images } from '../../constant';
@@ -36,9 +36,6 @@ const Sidebar: React.FC<SidebarProps> = () => {
   const { user } = useUser();
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const { logout } = useLogout({
-    onSuccess: () => console.log('User logged out'),
-  });
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -185,15 +182,7 @@ const Sidebar: React.FC<SidebarProps> = () => {
                 <span className="text-white text-sm">{tokenBalance || '0.0000'} ETN</span>
               </div>
             </div>
-            {/* Disconnect Button */}
-            <div className="flex justify-between items-center">
-              <button
-                onClick={logout}
-                className="w-full text-left px-3 py-2 text-white text-xs hover:bg-red-700"
-              >
-                Disconnect Wallet
-              </button>
-            </div>
+        
           </div>
         )}
       </div>
