@@ -9,7 +9,7 @@ import { safeContractRead } from '../../config/client';
 import { UIEvent, EventFilter } from '../../types';
 import { zeroAddress } from 'viem';
 
-const ITEMS_PER_PAGE = 9;
+const ITEMS_PER_PAGE = 8;
 
 // Filters to match contract's ticket type categories
 const filters: EventFilter[] = [
