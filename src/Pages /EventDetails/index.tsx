@@ -1,8 +1,7 @@
-import React, { useRef } from 'react';
-import { useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, MapPin, Link, Users, Calendar, Clock, AlertCircle, Share } from 'lucide-react';
-import { usePrivy, useUser, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClientInstance, createWalletClientInstance } from '../../config/client';
 import { formatEther, zeroAddress } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
@@ -20,6 +19,7 @@ import {
   ErrorStateProps,
   NoEventStateProps,
   adaptEventForTicketCreation,
+  PersistedTicketData,
 } from '../../types/index';
 
 // Loading state component
@@ -73,7 +73,6 @@ const EventDetails = () => {
   const { eventId } = useParams();
   const { login, authenticated } = usePrivy();
   const { wallets } = useWallets();
-  const { refreshUser } = useUser();
   const [balance, setBalance] = useState('Loading...');
 
   // Get network context for dynamic contract address and contract events
@@ -86,6 +85,10 @@ const EventDetails = () => {
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [hasTicket, setHasTicket] = useState(false);
   const [ticketCreated, setTicketCreated] = useState(false);
+
+  // Add new state for persisted ticket data
+  const [ticketData, setTicketData] = useState<PersistedTicketData | null>(null);
+  const [ticketDataLoaded, setTicketDataLoaded] = useState(false);
 
   const [attendanceRate, setAttendanceRate] = useState('Loading...');
   const [selectedTicketType, setSelectedTicketType] = useState('REGULAR');
@@ -104,6 +107,86 @@ const EventDetails = () => {
           : `0x${wallets[0].address}`) as `0x${string}`)
       : (zeroAddress as `0x${string}`);
 
+  // Add the persistTicketData function
+  const persistTicketData = useCallback(
+    (data: Partial<PersistedTicketData>) => {
+      if (!event || !wallets || !wallets[0]?.address) return null;
+
+      try {
+        // Create a ticket data object with all relevant information
+        const ticketInfo: PersistedTicketData = {
+          eventId: event.id,
+          userAddress: walletAddress,
+          ticketType: data.ticketType || selectedTicketType,
+          ticketPrice:
+            data.ticketPrice ||
+            (selectedTicketType === 'VIP' && event.ticketsData?.vipTicketFee
+              ? event.ticketsData.vipTicketFee.toString()
+              : event.ticketsData?.regularTicketFee
+              ? event.ticketsData.regularTicketFee.toString()
+              : '0'),
+          purchaseDate: data.purchaseDate || new Date().toISOString(),
+          transactionHash: data.transactionHash || transactionHash,
+          lastUpdated: new Date().toISOString(),
+        };
+
+        // Store the complete ticket data in localStorage
+        localStorage.setItem(
+          `event_${event.id}_user_${walletAddress}_ticket_data`,
+          JSON.stringify(ticketInfo),
+        );
+
+        // Update state
+        setTicketData(ticketInfo);
+
+        // Ensure hasTicket is set to true
+        setHasTicket(true);
+
+        return ticketInfo;
+      } catch (error) {
+        console.error('Error persisting ticket data:', error);
+        return null;
+      }
+    },
+    [event, wallets, walletAddress, selectedTicketType, transactionHash],
+  );
+
+  // Add the loadPersistedTicketData function
+  const loadPersistedTicketData = useCallback(() => {
+    if (!event || !wallets || !wallets[0]?.address) {
+      setTicketDataLoaded(true);
+      return null;
+    }
+
+    try {
+      // First try to get from localStorage
+      const storedData = localStorage.getItem(
+        `event_${event.id}_user_${walletAddress}_ticket_data`,
+      );
+
+      if (storedData) {
+        const parsedData = JSON.parse(storedData) as PersistedTicketData;
+
+        // Update relevant state variables
+        setTicketData(parsedData);
+        setTransactionHash(parsedData.transactionHash || '');
+        setSelectedTicketType(parsedData.ticketType || 'REGULAR');
+        setHasTicket(true);
+
+        setTicketDataLoaded(true);
+        return parsedData;
+      }
+
+      // If no data in localStorage, set ticketDataLoaded to true
+      setTicketDataLoaded(true);
+      return null;
+    } catch (error) {
+      console.error('Error loading persisted ticket data:', error);
+      setTicketDataLoaded(true);
+      return null;
+    }
+  }, [event, wallets, walletAddress]);
+
   // Fetch ETN balance
   const getETNBalance = async () => {
     if (!wallets || !wallets[0]?.address) return;
@@ -115,8 +198,6 @@ const EventDetails = () => {
 
       const formattedBalance = formatEther(balanceWei);
       setBalance(parseFloat(formattedBalance).toFixed(4));
-
-      await refreshUser();
     } catch (error) {
       setBalance('Error loading balance');
     }
@@ -210,14 +291,22 @@ const EventDetails = () => {
 
         setIsOrganizer(isUserOrganizer);
 
-        const hasRegistered = (await publicClient.readContract({
-          address: contractAddress,
-          abi: TICKET_CITY_ABI,
-          functionName: 'hasRegistered',
-          args: [walletAddress, eventIdNumber],
-        })) as boolean;
+        // IMPORTANT: Only check hasRegistered if we don't already have ticketData loaded
+        if (!ticketDataLoaded || !ticketData) {
+          const hasRegistered = (await publicClient.readContract({
+            address: contractAddress,
+            abi: TICKET_CITY_ABI,
+            functionName: 'hasRegistered',
+            args: [walletAddress, eventIdNumber],
+          })) as boolean;
 
-        setHasTicket(hasRegistered);
+          setHasTicket(hasRegistered);
+
+          // If user has a ticket but we don't have detailed data, try to load from transaction hash
+          if (hasRegistered && !ticketData) {
+            loadTicketTransactionHash();
+          }
+        }
       }
 
       // Calculate attendance rate
@@ -239,20 +328,34 @@ const EventDetails = () => {
     }
   };
 
-  // Watch for contract events and refresh data when they occur
   useEffect(() => {
     // If we have events and at least 1 second has passed since the last refresh
     // This prevents multiple refreshes in a short period
     if (contractEvents.length > 0 && Date.now() - lastEventRefresh > 1000) {
-      // Refresh data without showing loading state
-      loadEventDetails(false);
+      // Track the current length to compare in our cleanup function
+      const currentLength = contractEvents.length;
 
-      // Also refresh balance if authenticated
-      if (authenticated && wallets && wallets[0]?.address) {
-        getETNBalance();
-      }
+      // Use a debounce mechanism to prevent multiple refreshes
+      const timeoutId = setTimeout(() => {
+        // Only refresh if we still need to (length hasn't changed again)
+        if (currentLength === contractEvents.length) {
+          // Refresh data without showing loading state
+          // Only reload event details if no persisted ticket data exists
+          loadEventDetails(false);
+
+          // Update the last refresh timestamp
+          setLastEventRefresh(Date.now());
+
+          // Also refresh balance if authenticated
+          if (authenticated && wallets && wallets[0]?.address) {
+            getETNBalance();
+          }
+        }
+      }, 2000); // 2 second debounce
+
+      return () => clearTimeout(timeoutId);
     }
-  }, [contractEvents]);
+  }, [contractEvents.length]);
 
   // Use this effect for the initial load
   useEffect(() => {
@@ -265,7 +368,7 @@ const EventDetails = () => {
     }
   }, [eventId, authenticated, wallets]);
 
-  // Add effect to reload data when network changes
+  // effect to reload data when network changes
   useEffect(() => {
     // Reload data when isTestnet or chainId changes
     if (eventId) {
@@ -275,27 +378,6 @@ const EventDetails = () => {
       }
     }
   }, [isTestnet, chainId]);
-
-  // Add visibility change detection to refresh data when user returns to tab
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // User has returned to the tab - refresh data
-        loadEventDetails(false);
-        if (authenticated && wallets && wallets[0]?.address) {
-          getETNBalance();
-        }
-      }
-    };
-
-    // Add event listener for visibility change
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Clean up event listener on component unmount
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [authenticated, wallets]);
 
   // Format date from timestamp
   const formatDate = (timestamp: any) => {
@@ -383,10 +465,10 @@ const EventDetails = () => {
           account: walletAddress,
         });
 
-        // Rest of the function remains the same...
+        // Store transaction hash in localStorage
         localStorage.setItem(`event_${event.id}_user_${walletAddress}_ticket_tx`, hash);
 
-        // Create ticket metadata for Pinata
+        // Create ticket metadata
         const ticketMetadata = {
           eventId: event.id,
           eventTitle: event.details.title,
@@ -397,6 +479,9 @@ const EventDetails = () => {
           ticketPrice: ticketPrice.toString(),
           transactionHash: hash,
         };
+
+        // Persist ticket data to localStorage
+        persistTicketData(ticketMetadata);
 
         // Convert metadata to a file for Pinata upload
         const metadataBlob = new Blob([JSON.stringify(ticketMetadata)], {
@@ -433,7 +518,7 @@ const EventDetails = () => {
         if (receipt.status === 'success') {
           alert('Ticket purchased successfully!');
 
-          // Set transaction receipt in state
+          // Set transaction hash in state
           setTransactionHash(hash);
         } else {
           throw new Error('Transaction failed');
@@ -475,6 +560,24 @@ const EventDetails = () => {
 
       if (storedHash) {
         setTransactionHash(storedHash);
+
+        // If we have a transaction hash but no ticket data, create minimal persisted data
+        if (!ticketData) {
+          persistTicketData({
+            transactionHash: storedHash,
+            eventId: event.id,
+            userAddress: walletAddress,
+            ticketType: selectedTicketType,
+            purchaseDate: new Date().toISOString(),
+            ticketPrice:
+              selectedTicketType === 'VIP' && event.ticketsData?.vipTicketFee
+                ? event.ticketsData.vipTicketFee.toString()
+                : event.ticketsData?.regularTicketFee
+                ? event.ticketsData.regularTicketFee.toString()
+                : '0',
+            lastUpdated: new Date().toISOString(),
+          });
+        }
         return;
       }
 
@@ -501,6 +604,11 @@ const EventDetails = () => {
                 `event_${event.id}_user_${walletAddress}_ticket_tx`,
                 metadata.transactionHash,
               );
+
+              // Create persisted ticket data if we don't have it
+              if (!ticketData) {
+                persistTicketData(metadata);
+              }
             }
           }
         } catch (ipfsError) {
@@ -511,6 +619,25 @@ const EventDetails = () => {
       console.error('Error loading ticket transaction hash:', error);
     }
   };
+
+  useEffect(() => {
+    if (!ticketDataLoaded && event && authenticated && wallets && wallets[0]?.address) {
+      // Try to load data from localStorage first
+      const persistedData = loadPersistedTicketData();
+
+      if (!persistedData) {
+        // If no data in localStorage, only then check blockchain
+        loadTicketTransactionHash();
+      }
+    }
+  }, [
+    event,
+    authenticated,
+    wallets,
+    ticketDataLoaded,
+    loadPersistedTicketData,
+    loadTicketTransactionHash,
+  ]);
 
   useEffect(() => {
     if (event && hasTicket && wallets && wallets[0]?.address) {
@@ -621,6 +748,7 @@ const EventDetails = () => {
   const TicketOwnedSection = () => {
     const ticketRef = useRef<HTMLDivElement>(null);
     const [userTicketType, setUserTicketType] = useState('');
+    const [userTicketPrice, setUserTicketPrice] = useState('N/A');
     const [isLoadingTicketType, setIsLoadingTicketType] = useState(true);
 
     // Fetch the user's actual ticket type when component mounts
@@ -633,24 +761,6 @@ const EventDetails = () => {
           // Get current contract address from network context
           const contractAddress = getActiveContractAddress();
 
-          // Get event tickets data
-          const eventTicketsData = (await publicClient.readContract({
-            address: contractAddress,
-            abi: TICKET_CITY_ABI,
-            functionName: 'eventTickets',
-            args: [event.id],
-          })) as [boolean, boolean, number, number, string];
-
-          // Format ticket data with explicit types
-          const ticketsData = {
-            hasRegularTicket: eventTicketsData[0],
-            hasVIPTicket: eventTicketsData[1],
-            regularTicketFee: eventTicketsData[2],
-            vipTicketFee: eventTicketsData[3],
-            regularTicketNFT: String(eventTicketsData[3]), // Convert to string
-            vipTicketNFT: String(eventTicketsData[4]), // Convert to string
-          };
-
           // Check if user has registered for the event
           const hasRegistered = await publicClient.readContract({
             address: contractAddress,
@@ -661,119 +771,68 @@ const EventDetails = () => {
 
           if (!hasRegistered) {
             setUserTicketType('Not Registered');
+            setUserTicketPrice('N/A');
+            setIsLoadingTicketType(false);
             return;
           }
 
           // For FREE events
           if (Number(event.details.ticketType) === TicketType.FREE) {
             setUserTicketType('FREE');
+            setUserTicketPrice('FREE');
+            setIsLoadingTicketType(false);
             return;
           }
 
-          // Properly handle the NFT addresses and ensure they're valid Ethereum addresses
-          let vipTicketNFT: `0x${string}` | undefined;
-          let regularTicketNFT: `0x${string}` | undefined;
+          // Get event tickets data to determine available ticket types and prices
+          const eventTicketsData = (await publicClient.readContract({
+            address: contractAddress,
+            abi: TICKET_CITY_ABI,
+            functionName: 'eventTickets',
+            args: [event.id],
+          })) as [boolean, boolean, bigint, bigint, string, string];
 
-          // Check if vipTicketNFT is a valid value and format it correctly
-          if (
-            ticketsData.vipTicketNFT &&
-            ticketsData.vipTicketNFT !== 'undefined' &&
-            ticketsData.vipTicketNFT !== '0'
-          ) {
-            const addressValue = ticketsData.vipTicketNFT.toString();
-            vipTicketNFT = (
-              addressValue.startsWith('0x') ? addressValue : `0x${addressValue}`
-            ) as `0x${string}`;
+          // Based on the ABI, eventTickets returns a struct with these properties
+          const ticketsData = {
+            hasRegularTicket: eventTicketsData[0],
+            hasVIPTicket: eventTicketsData[1],
+            regularTicketFee: eventTicketsData[2],
+            vipTicketFee: eventTicketsData[3],
+            regularTicketNFT: eventTicketsData[4] as string,
+            vipTicketNFT: eventTicketsData[5] as string,
+          };
+
+          // For PAID events - use the selected ticket type as the source of truth
+          // This avoids the need to query the NFT contract which might be causing errors
+          if (selectedTicketType === 'VIP' && ticketsData.hasVIPTicket) {
+            setUserTicketType('VIP');
+            setUserTicketPrice(formatEther(ticketsData.vipTicketFee) + ' ETN');
+          } else if (ticketsData.hasRegularTicket) {
+            setUserTicketType('REGULAR');
+            setUserTicketPrice(formatEther(ticketsData.regularTicketFee) + ' ETN');
+          } else {
+            // Fallback if neither ticket type is available (shouldn't happen)
+            setUserTicketType('UNKNOWN');
+            setUserTicketPrice('N/A');
           }
-
-          // Check if regularTicketNFT is a valid value and format it correctly
-          if (
-            ticketsData.regularTicketNFT &&
-            ticketsData.regularTicketNFT !== 'undefined' &&
-            ticketsData.regularTicketNFT !== '0'
-          ) {
-            const addressValue = ticketsData.regularTicketNFT.toString();
-            regularTicketNFT = (
-              addressValue.startsWith('0x') ? addressValue : `0x${addressValue}`
-            ) as `0x${string}`;
-          }
-
-          // For PAID events - Check VIP first
-          if (ticketsData.hasVIPTicket && vipTicketNFT) {
-            try {
-              const vipBalance = await publicClient.readContract({
-                address: vipTicketNFT,
-                abi: [
-                  {
-                    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-                    name: 'balanceOf',
-                    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-                    stateMutability: 'view',
-                    type: 'function',
-                  },
-                ],
-                functionName: 'balanceOf',
-                args: [walletAddress],
-              });
-
-              if (vipBalance > 0) {
-                setUserTicketType('VIP');
-                return;
-              }
-            } catch (error) {
-              console.error('Error checking VIP ticket balance:', error);
-            }
-          }
-
-          // Then check REGULAR
-          if (ticketsData.hasRegularTicket && regularTicketNFT) {
-            try {
-              const regularBalance = await publicClient.readContract({
-                address: regularTicketNFT,
-                abi: [
-                  {
-                    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
-                    name: 'balanceOf',
-                    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-                    stateMutability: 'view',
-                    type: 'function',
-                  },
-                ],
-                functionName: 'balanceOf',
-                args: [walletAddress],
-              });
-
-              if (regularBalance > 0) {
-                setUserTicketType('REGULAR');
-                return;
-              }
-            } catch (error) {
-              console.error('Error checking REGULAR ticket balance:', error);
-            }
-          }
-
-          // If we got here but user is registered, default to REGULAR for backward compatibility
-          setUserTicketType('REGULAR');
         } catch (error) {
           console.error('Error fetching user ticket type:', error);
-          // If user is registered but we can't determine type, default to REGULAR
-          try {
-            const contractAddress = getActiveContractAddress();
-            const isRegistered = await publicClient.readContract({
-              address: contractAddress,
-              abi: TICKET_CITY_ABI,
-              functionName: 'hasRegistered',
-              args: [walletAddress, event.id],
-            });
 
-            if (isRegistered) {
-              setUserTicketType('REGULAR');
+          // Fallback to a safe default
+          if (selectedTicketType === 'VIP') {
+            setUserTicketType('VIP');
+            if (event.ticketsData?.vipTicketFee) {
+              setUserTicketPrice(formatEther(BigInt(event.ticketsData.vipTicketFee)) + ' ETN');
             } else {
-              setUserTicketType('UNKNOWN');
+              setUserTicketPrice('N/A');
             }
-          } catch (innerError) {
-            console.error('Error checking registration status:', innerError);
-            setUserTicketType('UNKNOWN');
+          } else {
+            setUserTicketType('REGULAR');
+            if (event.ticketsData?.regularTicketFee) {
+              setUserTicketPrice(formatEther(BigInt(event.ticketsData.regularTicketFee)) + ' ETN');
+            } else {
+              setUserTicketPrice('N/A');
+            }
           }
         } finally {
           setIsLoadingTicketType(false);
@@ -781,7 +840,7 @@ const EventDetails = () => {
       };
 
       fetchUserTicketType();
-    }, [event, wallets, isTestnet, chainId, contractEvents]); // Add contractEvents to trigger updates on contract events
+    }, [event, wallets, isTestnet, chainId, contractEvents, selectedTicketType]); // Add selectedTicketType to trigger updates when it changes
 
     // Function to download ticket as an image
     const downloadTicketAsImage = () => {
@@ -820,7 +879,6 @@ const EventDetails = () => {
 
     return (
       <div className="max-w-3xl mx-auto rounded-2xl border border-[#8A20FF] p-6 bg-[#6A00F4] shadow-lg overflow-hidden">
-        {/* Rest of the component remains the same */}
         {/* Ticket Header */}
         <div className="text-center mb-4 border-b border-dotted border-purple-300 pb-3">
           <div className="flex items-center justify-center mb-2">
@@ -871,18 +929,12 @@ const EventDetails = () => {
             <div className="flex justify-between">
               <span className="text-gray-300 text-sm">Price:</span>
               <span className="text-white text-sm">
-                {Number(event.details.ticketType) === TicketType.FREE
-                  ? 'FREE'
-                  : userTicketType === 'VIP' && event.ticketsData?.vipTicketFee
-                  ? `${formatEther(BigInt(event.ticketsData.vipTicketFee))} ETN`
-                  : userTicketType === 'REGULAR' && event.ticketsData?.regularTicketFee
-                  ? `${formatEther(BigInt(event.ticketsData.regularTicketFee))} ETN`
-                  : 'N/A'}
+                {isLoadingTicketType ? 'Loading...' : userTicketPrice}
               </span>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-gray-300 text-sm">Transaction ID:</span>
+              <span className="text-gray-300 text-sm">Wallet:</span>
               <span className="text-white text-sm truncate">
                 {wallets?.[0]?.address
                   ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
