@@ -9,7 +9,7 @@ import { safeContractRead } from '../../config/client';
 import { UIEvent, EventFilter } from '../../types';
 import { zeroAddress } from 'viem';
 
-const ITEMS_PER_PAGE = 9;
+const ITEMS_PER_PAGE = 8;
 
 // Filters to match contract's ticket type categories
 const filters: EventFilter[] = [
@@ -60,9 +60,9 @@ const EventsSection: React.FC = () => {
     // Check if event has VIP tickets
     const hasRegular = eventData.paidTicketCategory === 1; // PaidTicketCategory.REGULAR takes nuber 1 position in enum
     const hasVIP = eventData.paidTicketCategory === 2; // PaidTicketCategory.VIP takes nuber 2 position in enum
-    if (hasVIP || hasRegular) return 'Paid';
+    if (hasVIP && hasRegular) return 'Paid';
 
-    return 'Free';
+    return 'Paid';
   };
 
   // Function to get user's location

@@ -22,10 +22,10 @@ export interface NetworkContextType {
   refreshData: () => Promise<void>;
   networkName: string;
   connectionStatus: string;
-  contractEvents: any[]; // Added to store contract events
+  contractEvents: any[]; // to store contract events
 }
 
-//  context with a default value
+// context with a default value
 const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
 
 export const NetworkProvider = ({ children }: { children: ReactNode }) => {

@@ -5,7 +5,7 @@ import { parseEther, zeroAddress } from 'viem';
 import TICKET_CITY_ABI from '../../abi/abi.json';
 import { useNetwork } from '../../contexts/NetworkContext';
 import { createWalletClientInstance } from '../../config/client';
-import { safeFormatEther, truncateAddress } from '../../utils/utils';
+import { formatContractError, safeFormatEther, truncateAddress } from '../../utils/utils';
 import { PaidTicketCategory, TicketCreationSectionProps, TicketType } from '../../types';
 
 const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps) => {
@@ -26,9 +26,9 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
   const [ticketState, setTicketState] = useState({
     type: 'REGULAR', // This is the string representation
     typeEnum: PaidTicketCategory.REGULAR, // This is the actual enum value (1 for REGULAR, 2 for VIP)
-    price: 0,
-    regularPrice: 0,
-    vipPrice: 0,
+    price: '',
+    regularPrice: '',
+    vipPrice: '',
     ticketUrl: '',
     image: null as File | null,
     imageUrl: '',
@@ -77,14 +77,14 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
         case 'regularPrice':
           return {
             ...prevState,
-            regularPrice: Number(value),
-            ...(prevState.type === 'REGULAR' && { price: Number(value) }),
+            regularPrice: value as string,
+            ...(prevState.type === 'REGULAR' && { price: value as string }),
           };
         case 'vipPrice':
           return {
             ...prevState,
-            vipPrice: Number(value),
-            ...(prevState.type === 'VIP' && { price: Number(value) }),
+            vipPrice: value as string,
+            ...(prevState.type === 'VIP' && { price: value as string }),
           };
         case 'ticketUrl':
           return {
@@ -122,7 +122,10 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
 
     // For PAID events, validate ticket price based on type
     if (Number(event.ticketType) === TicketType.PAID) {
-      if (ticketState.type === 'REGULAR' && ticketState.regularPrice <= 0) {
+      if (
+        ticketState.type === 'REGULAR' &&
+        (!ticketState.regularPrice || Number(ticketState.regularPrice) <= 0)
+      ) {
         setCreationStatus({
           ...creationStatus,
           error: 'Regular ticket price must be greater than 0',
@@ -130,7 +133,10 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
         return;
       }
 
-      if (ticketState.type === 'VIP' && ticketState.vipPrice <= 0) {
+      if (
+        ticketState.type === 'VIP' &&
+        (!ticketState.vipPrice || Number(ticketState.vipPrice) <= 0)
+      ) {
         setCreationStatus({
           ...creationStatus,
           error: 'VIP ticket price must be greater than 0',
@@ -138,14 +144,14 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
         return;
       }
 
-      // Handle comparison logic for price validation
+      // price comparison logic
       if (ticketState.type === 'VIP' && event.ticketsData.hasRegularTicket) {
         const regularFee =
           typeof event.ticketsData.regularTicketFee === 'string'
             ? BigInt(event.ticketsData.regularTicketFee)
             : event.ticketsData.regularTicketFee;
 
-        if (parseEther(ticketState.vipPrice.toString()) <= regularFee) {
+        if (parseEther(String(ticketState.vipPrice)) <= regularFee) {
           setCreationStatus({
             ...creationStatus,
             error: 'VIP ticket price must be higher than regular ticket price',
@@ -154,14 +160,13 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
         }
       }
 
-      // Regular tickets must cost less than VIP tickets if they exist
       if (ticketState.type === 'REGULAR' && event.ticketsData.hasVIPTicket) {
         const vipFee =
           typeof event.ticketsData.vipTicketFee === 'string'
             ? BigInt(event.ticketsData.vipTicketFee)
             : event.ticketsData.vipTicketFee;
 
-        if (parseEther(ticketState.regularPrice.toString()) >= vipFee) {
+        if (parseEther(String(ticketState.regularPrice)) >= vipFee) {
           setCreationStatus({
             ...creationStatus,
             error: 'Regular ticket price must be lower than VIP ticket price',
@@ -199,9 +204,9 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
         // For PAID events, use the typeEnum value from state
         ticketCategory = ticketState.typeEnum;
         if (ticketState.type === 'REGULAR') {
-          ticketPrice = parseEther(ticketState.regularPrice.toString());
+          ticketPrice = parseEther(String(ticketState.regularPrice || '0'));
         } else {
-          ticketPrice = parseEther(ticketState.vipPrice.toString());
+          ticketPrice = parseEther(String(ticketState.vipPrice || '0'));
         }
       }
 
@@ -222,22 +227,27 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
         });
 
         console.log('Create ticket transaction hash:', hash);
-      } catch (walletError: any) {
-        // Handle wallet rejections and other transaction initiation errors
-        console.error('Transaction initiation error:', walletError);
+      } catch (walletError) {
+        // Use our enhanced error formatting function
         setCreationStatus({
           loading: false,
           success: false,
-          error: `Transaction failed: ${
-            walletError instanceof Error ? walletError.message : 'Unknown error'
-          }. Please try again.`,
+          error: formatContractError(walletError),
           currentType: ticketState.type,
         });
         return; // Exit early
       }
 
       try {
-        // Set a timeout for waiting for transaction confirmation
+        // Show pending state while waiting for confirmation
+        setCreationStatus({
+          loading: true,
+          success: false,
+          error: null,
+          currentType: ticketState.type,
+        });
+
+        // Set a timeout for waiting for transaction confirmation - use Promise.race
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => {
             reject(new Error('Transaction confirmation timed out after 30 seconds'));
@@ -268,46 +278,29 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
               setTicketState((prev) => ({
                 ...prev,
                 type: 'VIP',
-                typeEnum: PaidTicketCategory.VIP, // Set the proper enum value (2)
+                typeEnum: PaidTicketCategory.VIP,
               }));
             }
           }
         } else {
-          throw new Error('Transaction failed');
+          throw new Error('Transaction failed on blockchain');
         }
-      } catch (confirmationError: any) {
-        // Handle confirmation errors (timeouts, etc.)
-        console.error('Transaction confirmation error:', confirmationError);
-
-        if (confirmationError instanceof Error && confirmationError.message.includes('timed out')) {
-          // Special handling for timeout errors
-          setCreationStatus({
-            loading: false,
-            success: false,
-            error:
-              'Transaction submitted but confirmation timed out. Your transaction may still complete - please check your wallet or transaction history before trying again.',
-            currentType: ticketState.type,
-          });
-        } else {
-          setCreationStatus({
-            loading: false,
-            success: false,
-            error: `Transaction could not be confirmed: ${
-              confirmationError instanceof Error ? confirmationError.message : 'Unknown error'
-            }`,
-            currentType: ticketState.type,
-          });
-        }
+      } catch (confirmationError) {
+        // Use our enhanced error formatting function
+        setCreationStatus({
+          loading: false,
+          success: false,
+          error: formatContractError(confirmationError),
+          currentType: ticketState.type,
+        });
       }
-    } catch (error: any) {
+    } catch (error) {
       // Catch any other errors that might have been missed
       console.error('Error creating ticket:', error);
       setCreationStatus({
         loading: false,
         success: false,
-        error: `Failed to create ${ticketState.type.toLowerCase()} ticket: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
+        error: formatContractError(error),
         currentType: ticketState.type,
       });
     }
@@ -543,6 +536,7 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
               className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
               min="0"
               step="0.01"
+              placeholder="Enter price"
             />
             {event.ticketsData.hasVIPTicket && (
               <p className="text-sm text-gray-400 mt-1">
@@ -565,6 +559,7 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
               className="w-full bg-searchBg border border-borderStroke rounded-lg p-3 text-white"
               min="0"
               step="0.01"
+              placeholder="Enter price"
             />
             {event.ticketsData.hasRegularTicket && (
               <p className="text-sm text-gray-400 mt-1">
