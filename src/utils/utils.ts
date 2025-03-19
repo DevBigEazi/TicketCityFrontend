@@ -32,6 +32,57 @@ export const parseChainId = (chainId: string | number | undefined): number | nul
   }
 };
 
+export const formatContractError = (error: any) => {
+  console.error('Contract interaction error:', error);
+
+  // Check for common wallet errors
+  if (error?.message?.includes('user rejected transaction')) {
+    return 'Transaction was rejected in your wallet. Please try again.';
+  }
+
+  if (error?.message?.includes('insufficient funds')) {
+    return 'Insufficient funds in your wallet to complete this transaction.';
+  }
+
+  // Network related errors
+  if (error?.message?.includes('network') || error?.message?.includes('chain')) {
+    return 'Network connection issue. Please check you are on the correct network.';
+  }
+
+  // Gas related errors
+  if (error?.message?.includes('gas')) {
+    return 'Transaction failed due to gas estimation. Try increasing gas limit.';
+  }
+
+  // Smart contract specific errors (often in the data property)
+  if (error?.data) {
+    return `Smart contract error: ${error.data.message || JSON.stringify(error.data)}`;
+  }
+
+  // RPC errors often have code property
+  if (error?.code) {
+    // Common RPC error codes
+    switch (error.code) {
+      case 4001:
+        return 'Transaction rejected by user.';
+      case -32603:
+        return 'Internal JSON-RPC error. Please try again later.';
+      case -32002:
+        return 'Request already pending in your wallet. Please check your wallet.';
+      default:
+        return `RPC error (${error.code}): ${error.message || 'Unknown error'}`;
+    }
+  }
+
+  // Timeouts
+  if (error?.message?.includes('timeout') || error?.message?.includes('timed out')) {
+    return 'Transaction submission timed out. It may still complete - please check your wallet before trying again.';
+  }
+
+  // Any other errors
+  return error?.message || 'Unknown contract interaction error. Please try again.';
+};
+
 // Helper function to convert string/bigint to formatted string
 export const safeFormatEther = (value: string | bigint): string => {
   // If it's already a string, parse it to make sure it's a valid number
