@@ -123,6 +123,10 @@ const EventCard: React.FC<EventCardProps> = ({
   // Ensure price values are numbers and handle potential undefined
   const regularPrice = typeof price?.regular === 'number' ? price.regular : 0;
   const vipPrice = typeof price?.vip === 'number' ? price.vip : 0;
+  
+  // Check if regular and VIP tickets are available
+  const hasRegularTicket = regularPrice > 0;
+  const hasVIPTicket = vipPrice > 0;
 
   // Handle image loading errors
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -175,6 +179,32 @@ const EventCard: React.FC<EventCardProps> = ({
         <Ticket className="w-3 h-3 mr-1" />
       </div>
     );
+  };
+
+  // Render ticket price information based on availability
+  const renderTicketPrices = () => {
+    // For Free events
+    if (type === 'Free') {
+      return 'Free Ticket';
+    }
+    
+    // For Paid events with different ticket options
+    if (hasRegularTicket && hasVIPTicket) {
+      return (
+        <>
+          REGULAR: {regularPrice} ETN
+          <span className="text-white"> | </span>
+          <span className="text-primary">VIP: {vipPrice} ETN</span>
+        </>
+      );
+    } else if (hasRegularTicket) {
+      return `REGULAR: ${regularPrice} ETN`;
+    } else if (hasVIPTicket) {
+      return `VIP: ${vipPrice} ETN`;
+    } else {
+      // Fallback for paid events with no ticket prices set
+      return 'Tickets Available';
+    }
   };
 
   // Live indicator component - separate from other components to ensure consistent rendering
@@ -294,19 +324,7 @@ const EventCard: React.FC<EventCardProps> = ({
           {/* Public listing UI */}
           <div className={`${isGrid ? 'space-y-3' : 'flex items-center justify-between'}`}>
             <div className="font-inter font-semibold text-primary">
-              {regularPrice === 0 ? (
-                'Free Ticket'
-              ) : (
-                <>
-                  REGULAR: {regularPrice} ETN
-                  {vipPrice > 0 && (
-                    <>
-                      <span className="text-white"> | </span>
-                      <span className="text-primary">VIP: {vipPrice} ETN</span>
-                    </>
-                  )}
-                </>
-              )}
+              {renderTicketPrices()}
             </div>
 
             <button
@@ -364,7 +382,17 @@ const EventCard: React.FC<EventCardProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center text-sm text-textGray">
               <Ticket className="w-4 h-4 mr-2 flex-shrink-0 text-primary" />
-              <span>{type === 'Free' ? 'Free' : `${regularPrice} ETN`}</span>
+              <span>
+                {type === 'Free' 
+                  ? 'Free' 
+                  : hasRegularTicket && hasVIPTicket
+                    ? `${regularPrice}/${vipPrice} ETN`
+                    : hasRegularTicket
+                      ? `${regularPrice} ETN`
+                      : hasVIPTicket
+                        ? `${vipPrice} ETN`
+                        : 'Paid'}
+              </span>
             </div>
 
             {attendees && (
