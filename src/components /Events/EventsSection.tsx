@@ -62,7 +62,7 @@ const EventsSection: React.FC = () => {
     const hasVIP = eventData.paidTicketCategory === 2; // PaidTicketCategory.VIP takes nuber 2 position in enum
     if (hasVIP && hasRegular) return 'Paid';
 
-    return "Paid"
+    return 'Paid';
   };
 
   // Function to get user's location

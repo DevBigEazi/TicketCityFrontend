@@ -1,18 +1,7 @@
 import React from 'react';
 import { Calendar, MapPin, Ticket, Users, CheckCircle, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { UIEvent, Event } from '../../types';
-
-interface EventCardProps {
-  event: Event | UIEvent;
-  viewMode?: 'grid' | 'list';
-  hasTicket?: boolean;
-  ticketType?: string;
-  isDashboard?: boolean;
-  isVerified?: boolean;
-  onCheckIn?: (eventId: string) => void;
-  locationInfo?: string; // Add this new property
-}
+import { UIEvent, Event, EventCardProps } from '../../types';
 
 const EventCard: React.FC<EventCardProps> = ({
   event,
@@ -123,7 +112,7 @@ const EventCard: React.FC<EventCardProps> = ({
   // Ensure price values are numbers and handle potential undefined
   const regularPrice = typeof price?.regular === 'number' ? price.regular : 0;
   const vipPrice = typeof price?.vip === 'number' ? price.vip : 0;
-  
+
   // Check if regular and VIP tickets are available
   const hasRegularTicket = regularPrice > 0;
   const hasVIPTicket = vipPrice > 0;
@@ -187,7 +176,7 @@ const EventCard: React.FC<EventCardProps> = ({
     if (type === 'Free') {
       return 'Free Ticket';
     }
-    
+
     // For Paid events with different ticket options
     if (hasRegularTicket && hasVIPTicket) {
       return (
@@ -323,9 +312,7 @@ const EventCard: React.FC<EventCardProps> = ({
 
           {/* Public listing UI */}
           <div className={`${isGrid ? 'space-y-3' : 'flex items-center justify-between'}`}>
-            <div className="font-inter font-semibold text-primary">
-              {renderTicketPrices()}
-            </div>
+            <div className="font-inter font-semibold text-primary">{renderTicketPrices()}</div>
 
             <button
               className={`${
@@ -383,15 +370,15 @@ const EventCard: React.FC<EventCardProps> = ({
             <div className="flex items-center text-sm text-textGray">
               <Ticket className="w-4 h-4 mr-2 flex-shrink-0 text-primary" />
               <span>
-                {type === 'Free' 
-                  ? 'Free' 
+                {type === 'Free'
+                  ? 'Free'
                   : hasRegularTicket && hasVIPTicket
-                    ? `${regularPrice}/${vipPrice} ETN`
-                    : hasRegularTicket
-                      ? `${regularPrice} ETN`
-                      : hasVIPTicket
-                        ? `${vipPrice} ETN`
-                        : 'Paid'}
+                  ? `${regularPrice}/${vipPrice} ETN`
+                  : hasRegularTicket
+                  ? `${regularPrice} ETN`
+                  : hasVIPTicket
+                  ? `${vipPrice} ETN`
+                  : 'Paid'}
               </span>
             </div>
 
