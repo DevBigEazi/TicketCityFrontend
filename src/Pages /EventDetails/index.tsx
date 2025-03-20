@@ -1009,7 +1009,9 @@ const EventDetails = () => {
               <p className="mb-1 font-semibold">Transaction Details:</p>
               <p className="break-all text-xs">Hash: {transactionHash}</p>
               <a
-                href={`https://blockexplorer.electroneum.com/tx/${transactionHash}`}
+                href={`https://${
+                  isTestnet ? 'testnet-' : ''
+                }blockexplorer.electroneum.com/tx/${transactionHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-yellow-300 hover:text-yellow-400 text-xs inline-block mt-1"
@@ -1215,6 +1217,7 @@ const EventDetails = () => {
                   (!event.ticketsData.hasRegularTicket || !event.ticketsData.hasVIPTicket)) ? (
                   <TicketCreationSection
                     event={adaptEventForTicketCreation(event)}
+                    imageUri={event.details.imageUri}
                     fetchEventDetails={loadEventDetails}
                     isLoading={isLoading}
                     setIsLoading={setIsLoading}
