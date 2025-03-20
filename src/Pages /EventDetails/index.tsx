@@ -1215,6 +1215,7 @@ const EventDetails = () => {
                   (!event.ticketsData.hasRegularTicket || !event.ticketsData.hasVIPTicket)) ? (
                   <TicketCreationSection
                     event={adaptEventForTicketCreation(event)}
+                    imageUri={event.details.imageUri}
                     fetchEventDetails={loadEventDetails}
                     isLoading={isLoading}
                     setIsLoading={setIsLoading}

@@ -8,7 +8,7 @@ import { createWalletClientInstance } from '../../config/client';
 import { formatContractError, safeFormatEther, truncateAddress } from '../../utils/utils';
 import { PaidTicketCategory, TicketCreationSectionProps, TicketType } from '../../types';
 
-const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps) => {
+const TicketCreationSection = ({ event, imageUri, isLoading }: TicketCreationSectionProps) => {
   const { wallets } = useWallets();
   const {
     getPublicClient,
@@ -19,7 +19,7 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
     contractEvents,
   } = useNetwork();
 
-  // Create public client using the network context
+  // public client using the network context
   const publicClient = getPublicClient();
 
   // State for managing ticket creation
@@ -29,9 +29,6 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
     price: '',
     regularPrice: '',
     vipPrice: '',
-    ticketUrl: '',
-    image: null as File | null,
-    imageUrl: '',
   });
 
   const [creationStatus, setCreationStatus] = useState({
@@ -59,7 +56,7 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
   };
 
   // Handle ticket type and price changes
-  type TicketField = 'type' | 'regularPrice' | 'vipPrice' | 'ticketUrl';
+  type TicketField = 'type' | 'regularPrice' | 'vipPrice';
 
   const handleTicketChange = (field: TicketField, value: string | number) => {
     setTicketState((prevState) => {
@@ -85,11 +82,6 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
             ...prevState,
             vipPrice: value as string,
             ...(prevState.type === 'VIP' && { price: value as string }),
-          };
-        case 'ticketUrl':
-          return {
-            ...prevState,
-            ticketUrl: String(value),
           };
         default:
           return prevState;
@@ -188,8 +180,9 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
       const provider = await wallets[0].getEthereumProvider();
       const walletClient = createWalletClientInstance(provider, isTestnet);
 
-      // Use image URL if available
-      const ticketUri = ticketState.imageUrl;
+      // Use the imageUri passed as a prop, or an empty string as fallback
+      const ticketUri = imageUri || '';
+      console.log(`Using ticket URI: ${ticketUri}`);
 
       // Determine the appropriate ticket category and price based on event type
       let ticketCategory;
@@ -375,17 +368,7 @@ const TicketCreationSection = ({ event, isLoading }: TicketCreationSectionProps)
           </div>
         ) : (
           <div className="space-y-4">
-            <div>
-              {ticketState.imageUrl && (
-                <div className="mt-2">
-                  <img
-                    src={ticketState.imageUrl}
-                    alt="Ticket preview"
-                    className="w-full h-40 object-cover rounded-lg"
-                  />
-                </div>
-              )}
-            </div>
+            {/* Removed ticketUrl preview section since it's no longer needed */}
 
             {/* Network Information */}
             <div className="bg-primary/20 p-3 rounded-lg">
