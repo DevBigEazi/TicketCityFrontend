@@ -41,6 +41,7 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
 
   const [tokenBalance, setTokenBalance] = useState<string>('Loading...');
   const [contractEvents, setContractEvents] = useState<any[]>([]); // State to store contract events
+  const [pastEventsLoaded, setPastEventsLoaded] = useState<boolean>(false); // Track if past events loaded
 
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
@@ -131,7 +132,30 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [wallets, getPublicClient, currentWalletAddress]);
 
-  // Setup contract event listener
+  // Load past contract events - separate from setting up listeners
+  const loadPastEvents = useCallback(async () => {
+    if (!authenticated || !wallet || !networkState.isConnected) return;
+
+    try {
+      const publicClient = getPublicClient();
+      const contractAddress = getActiveContractAddress();
+
+      // Get past contract events
+      const logs = await publicClient.getContractEvents({
+        abi: TICKET_CITY_ABI,
+        address: contractAddress,
+      });
+
+      console.log('Loaded past contract events:', logs.length);
+      setContractEvents(logs);
+      setPastEventsLoaded(true);
+    } catch (error) {
+      console.error('Error loading past contract events:', error);
+      setPastEventsLoaded(true); // Mark as loaded even on error
+    }
+  }, [authenticated, wallet, networkState.isConnected, getPublicClient, getActiveContractAddress]);
+
+  // contract event listener - only for new events
   const setupContractEventListener = useCallback(async () => {
     if (!authenticated || !wallet || !networkState.isConnected) return;
 
@@ -139,26 +163,39 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
       const publicClient = getPublicClient();
       const contractAddress = getActiveContractAddress();
 
-      // Get contract events
-      const logs = await publicClient.getContractEvents({
-        abi: TICKET_CITY_ABI,
-        address: contractAddress,
-      });
+      console.log('Setting up contract event listener');
 
-      console.log('Contract events:', logs);
-      setContractEvents(logs);
-
-      // Setup event listener for future events
+      // event listener for future events
       const unwatch = publicClient.watchContractEvent({
         abi: TICKET_CITY_ABI,
         address: contractAddress,
         onLogs: (logs) => {
+          console.log('New contract events:', logs.length);
           console.log('New contract events:', logs);
-          setContractEvents((prevLogs) => [...prevLogs, ...logs]);
+
+          // Use a function to avoid stale state
+          setContractEvents((prevLogs) => {
+            // Filter out duplicate events
+            const newEvents = logs.filter(
+              (newLog) =>
+                !prevLogs.some(
+                  (existingLog) =>
+                    existingLog.transactionHash === newLog.transactionHash &&
+                    existingLog.logIndex === newLog.logIndex,
+                ),
+            );
+
+            if (newEvents.length > 0) {
+              console.log(`Adding ${newEvents.length} new events to state`);
+              return [...prevLogs, ...newEvents];
+            }
+
+            return prevLogs;
+          });
         },
       });
 
-      // Return unwatch function to clean up listener when needed
+      // Return unwatch function to clean up listener
       return unwatch;
     } catch (error) {
       console.error('Error setting up contract event listener:', error);
@@ -170,8 +207,8 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     await detectNetwork();
     await checkRPCStatus();
     await getETNBalance();
-    await setupContractEventListener();
-  }, [detectNetwork, checkRPCStatus, getETNBalance, setupContractEventListener]);
+    // Don't reload events or create new listeners here - that's handled in useEffect
+  }, [detectNetwork, checkRPCStatus, getETNBalance]);
 
   // Get human-readable network info
   const getNetworkName = useCallback(() => {
@@ -204,22 +241,53 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [authenticated, wallet, detectNetwork]);
 
-  // Set up polling for updates and contract event listener
+  // event listeners when connected to network
+  useEffect(() => {
+    // Skip if not authenticated or no wallet
+    if (!authenticated || !wallet) return;
+
+    // Skip if not connected to network
+    if (!networkState.isConnected) return;
+
+    // Reference to cleanup function
+    let unwatchEvents: (() => void) | undefined;
+
+    const initializeEvents = async () => {
+      // Load past events first if not already loaded
+      if (!pastEventsLoaded) {
+        await loadPastEvents();
+      }
+
+      // Then set up listener for new events
+      unwatchEvents = await setupContractEventListener();
+    };
+
+    initializeEvents();
+
+    // Cleanup function
+    return () => {
+      if (unwatchEvents) {
+        console.log('Cleaning up contract event listener');
+        unwatchEvents();
+      }
+    };
+  }, [
+    authenticated,
+    wallet,
+    networkState.isConnected,
+    networkState.chainId,
+    networkState.isTestnet,
+    loadPastEvents,
+    setupContractEventListener,
+    pastEventsLoaded,
+  ]);
+
+  // polling for periodic updates
   useEffect(() => {
     if (authenticated && currentWalletAddress) {
       // Initial check
       checkRPCStatus();
       getETNBalance();
-
-      // Setup contract event listener
-      let unwatchEvents: (() => void) | undefined;
-
-      // Only set up event listener if connected to network
-      if (networkState.isConnected) {
-        setupContractEventListener().then((unwatch) => {
-          unwatchEvents = unwatch;
-        });
-      }
 
       // Set up interval for periodic checks
       const intervalId = setInterval(() => {
@@ -229,37 +297,17 @@ export const NetworkProvider = ({ children }: { children: ReactNode }) => {
 
       return () => {
         clearInterval(intervalId);
-        if (unwatchEvents) unwatchEvents();
       };
     }
-  }, [
-    authenticated,
-    currentWalletAddress,
-    checkRPCStatus,
-    getETNBalance,
-    setupContractEventListener,
-    networkState.isConnected,
-  ]);
+  }, [authenticated, currentWalletAddress, checkRPCStatus, getETNBalance]);
 
-  // Effect for network changes
+  // Reset past events loaded state when network changes
   useEffect(() => {
-    if (authenticated && currentWalletAddress) {
-      // Refresh data after network change
-      const timeoutId = setTimeout(() => {
-        getETNBalance();
-        setupContractEventListener();
-      }, 2000);
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [
-    authenticated,
-    currentWalletAddress,
-    networkState.chainId,
-    networkState.isTestnet,
-    getETNBalance,
-    setupContractEventListener,
-  ]);
+    // When network changes, mark past events as not loaded
+    setPastEventsLoaded(false);
+    // Clear existing events
+    setContractEvents([]);
+  }, [networkState.isTestnet, networkState.chainId]);
 
   // Context value
   const value: NetworkContextType = {
