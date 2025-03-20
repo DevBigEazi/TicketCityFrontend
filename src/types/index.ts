@@ -190,6 +190,7 @@ export interface TicketTypeSelectorProps {
 
 export interface TicketCreationSectionProps {
   event: TicketCreationEvent;
+  imageUri?: string;
   fetchEventDetails: (showLoading?: boolean) => Promise<void>;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
